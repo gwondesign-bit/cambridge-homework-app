@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>캠브리지 영어 숙제</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#4361ee">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="영어숙제">
+<style>
+  :root {
+    --primary: #4361ee;
+    --primary-dark: #3a4fd0;
+    --bg: #f4f6fb;
+    --card: #ffffff;
+    --text: #1b2340;
+    --muted: #7a829e;
+    --danger: #e5484d;
+    --radius: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+    background: var(--bg); color: var(--text);
+    display: flex; justify-content: center;
+    padding-top: env(safe-area-inset-top);
+  }
+  #app { width: 100%; max-width: 430px; min-height: 100%; padding: 24px 20px; display: flex; flex-direction: column; }
+
+  .brand { text-align: center; margin: 24px 0 8px; }
+  .brand h1 { font-size: 22px; }
+  .brand p { color: var(--muted); font-size: 13px; margin-top: 6px; }
+
+  .step-title { font-size: 17px; font-weight: bold; margin: 24px 0 12px; }
+  .back-btn { background: none; border: none; color: var(--muted); font-size: 14px; padding: 8px 0; cursor: pointer; }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .choice-btn {
+    background: var(--card); border: 2px solid transparent; border-radius: var(--radius);
+    padding: 20px 12px; font-size: 17px; font-weight: bold; color: var(--text);
+    box-shadow: 0 2px 8px rgba(27,35,64,.06); cursor: pointer; transition: transform .06s;
+  }
+  .choice-btn:active { transform: scale(.97); border-color: var(--primary); }
+
+  /* PIN */
+  .pin-dots { display: flex; justify-content: center; gap: 16px; margin: 20px 0 8px; }
+  .pin-dot { width: 16px; height: 16px; border-radius: 50%; background: #d9deec; }
+  .pin-dot.filled { background: var(--primary); }
+  .pin-msg { text-align: center; min-height: 20px; font-size: 14px; color: var(--danger); margin-bottom: 8px; }
+  .pin-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 8px; }
+  .pin-key {
+    background: var(--card); border: none; border-radius: var(--radius);
+    padding: 18px 0; font-size: 22px; font-weight: bold; color: var(--text);
+    box-shadow: 0 2px 6px rgba(27,35,64,.06); cursor: pointer;
+  }
+  .pin-key:active { background: #e8ecfa; }
+  .pin-key.fn { font-size: 15px; color: var(--muted); background: transparent; box-shadow: none; }
+
+  .teacher-link { margin-top: auto; padding-top: 28px; text-align: center; }
+  .teacher-link button { background: none; border: none; color: var(--muted); font-size: 13px; text-decoration: underline; cursor: pointer; }
+
+  /* 로그인 후 자리표시 화면 */
+  .home-card { background: var(--card); border-radius: var(--radius); padding: 28px 20px; text-align: center; box-shadow: 0 2px 8px rgba(27,35,64,.06); margin-top: 32px; }
+  .home-card .hello { font-size: 20px; font-weight: bold; margin-bottom: 8px; }
+  .home-card .note { color: var(--muted); font-size: 13px; line-height: 1.6; }
+  .logout-btn { margin-top: 20px; background: var(--primary); color: #fff; border: none; border-radius: 12px; padding: 12px 24px; font-size: 15px; font-weight: bold; cursor: pointer; }
+
+  .loading { text-align: center; color: var(--muted); padding: 48px 0; }
+  .hidden { display: none; }
+  .offline-note { text-align: center; color: var(--muted); font-size: 12px; padding: 8px 0; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="brand">
+    <h1>캠브리지 영어 숙제</h1>
+    <p id="brand-sub">오늘도 반가워요!</p>
+  </div>
+
+  <div id="screen-loading" class="loading">불러오는 중...</div>
+
+  <!-- 1단계: 반 선택 -->
+  <div id="screen-group" class="hidden">
+    <div class="step-title">우리 반을 골라주세요</div>
+    <div id="group-grid" class="grid"></div>
+    <div class="teacher-link"><button onclick="App.showTeacherLogin()">선생님 로그인</button></div>
+  </div>
+
+  <!-- 2단계: 이름 선택 -->
+  <div id="screen-name" class="hidden">
+    <button class="back-btn" onclick="App.showGroups()">&larr; 반 다시 고르기</button>
+    <div class="step-title" id="name-title">이름을 골라주세요</div>
+    <div id="name-grid" class="grid"></div>
+  </div>
+
+  <!-- 3단계: PIN 입력 (학생/선생님 공용) -->
+  <div id="screen-pin" class="hidden">
+    <button class="back-btn" id="pin-back">&larr; 뒤로</button>
+    <div class="step-title" id="pin-title">비밀번호 4자리를 눌러주세요</div>
+    <div class="pin-dots">
+      <div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>
+    </div>
+    <div class="pin-msg" id="pin-msg"></div>
+    <div class="pin-pad" id="pin-pad"></div>
+  </div>
+
+  <!-- 로그인 후 자리표시 (3.1 학습 대시보드 / 4.1 현황판에서 교체) -->
+  <div id="screen-home" class="hidden">
+    <div class="home-card">
+      <div class="hello" id="home-hello"></div>
+      <div class="note" id="home-note"></div>
+      <button class="logout-btn" onclick="App.logout()">로그아웃</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== 설정 =====
+// GAS 웹앱(Api.gs) 배포 URL. 재배포 시 "기존 배포 수정 → 새 버전"을 쓰면 이 URL은 바뀌지 않는다.
+var API_URL = 'https://script.google.com/macros/s/AKfycbw7YF-4dqomyexzQFUM3HiVLwZWUhNBBNcu2O-DqS1HXvpnTZ1mG2FglILSIoDGDmpY1g/exec';
+
+// ===== 서버 호출 래퍼 =====
+// file:// 로 직접 열면(개발 미리보기) mock, 그 외에는 GAS JSON API를 fetch로 호출
+var Server = (function () {
+  var useMock = location.protocol === 'file:';
+  if (!useMock) {
+    var payloadOf = {
+      getLoginBootstrap: function () { return {}; },
+      loginStudent: function (a) { return { studentId: a[0], pin: a[1] }; },
+      loginTeacher: function (a) { return { pin: a[0] }; },
+      verifySession: function (a) { return { token: a[0] }; }
+    };
+    return {
+      call: function (fn, args, onOk, onErr) {
+        var body = Object.assign({ action: fn }, payloadOf[fn](args || []));
+        fetch(API_URL, {
+          method: 'POST',
+          // text/plain: CORS preflight를 만들지 않는 안전한 타입 (설계결정문서 5.13)
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(body)
+        })
+          .then(function (r) { return r.json(); })
+          .then(onOk)
+          .catch(onErr || function () {
+            alert('연결에 문제가 있어요. 인터넷을 확인하고 다시 해보세요.');
+          });
+      }
+    };
+  }
+  // ---- 로컬 미리보기용 mock ----
+  var MOCK = {
+    getLoginBootstrap: function () {
+      return { ok: true,
+        groups: [ { group_id: 'G-A', group_name: 'A반' }, { group_id: 'G-B', group_name: 'B반' } ],
+        studentsByGroup: {
+          'G-A': [ { student_id: 'S001', name: '김철수' }, { student_id: 'S002', name: '이영희' } ],
+          'G-B': [ { student_id: 'S003', name: '박민수' } ]
+        } };
+    },
+    loginStudent: function (studentId, pin) {
+      if (pin === '1234') return { ok: true, token: 'mock-token', role: 'student',
+        student: { student_id: studentId, name: '김철수', group_id: 'G-A' } };
+      return { ok: false, message: 'PIN이 맞지 않아요. (4번 남음)' };
+    },
+    loginTeacher: function (pin) {
+      if (pin === '9999') return { ok: true, token: 'mock-teacher', role: 'teacher' };
+      return { ok: false, message: '관리자 PIN이 맞지 않습니다.' };
+    },
+    verifySession: function (token) {
+      if (token === 'mock-token') return { ok: true, role: 'student', studentId: 'S001' };
+      if (token === 'mock-teacher') return { ok: true, role: 'teacher' };
+      return { ok: false };
+    }
+  };
+  return { call: function (fn, args, onOk) { setTimeout(function () { onOk(MOCK[fn].apply(null, args || [])); }, 150); } };
+})();
+
+var App = (function () {
+  var SESSION_KEY = 'cambridge_session';
+  var bootstrap = null;
+  var selGroup = null, selStudent = null;
+  var pinBuffer = '', pinMode = 'student'; // 'student' | 'teacher'
+
+  function $(id) { return document.getElementById(id); }
+  function show(id) {
+    ['screen-loading','screen-group','screen-name','screen-pin','screen-home'].forEach(function (s) {
+      $(s).classList.toggle('hidden', s !== id);
+    });
+  }
+  function saveSession(s) { localStorage.setItem(SESSION_KEY, JSON.stringify(s)); }
+  function loadSession() {
+    try { return JSON.parse(localStorage.getItem(SESSION_KEY)); } catch (e) { return null; }
+  }
+
+  function init() {
+    var sess = loadSession();
+    if (sess && sess.token) {
+      Server.call('verifySession', [sess.token], function (res) {
+        if (res.ok) { showHome(sess); } else { localStorage.removeItem(SESSION_KEY); loadBootstrap(); }
+      }, function () {
+        // 오프라인 등으로 검증 실패 시: 저장된 세션으로 일단 진입 (다음 온라인 요청에서 재검증)
+        showHome(sess);
+      });
+    } else {
+      loadBootstrap();
+    }
+  }
+
+  function loadBootstrap() {
+    show('screen-loading');
+    Server.call('getLoginBootstrap', [], function (res) {
+      bootstrap = res;
+      renderGroups();
+    });
+  }
+
+  function renderGroups() {
+    var grid = $('group-grid');
+    grid.innerHTML = '';
+    bootstrap.groups.forEach(function (g) {
+      var b = document.createElement('button');
+      b.className = 'choice-btn';
+      b.textContent = g.group_name;
+      b.onclick = function () { selGroup = g; renderNames(); };
+      grid.appendChild(b);
+    });
+    show('screen-group');
+  }
+
+  function renderNames() {
+    $('name-title').textContent = selGroup.group_name + ' — 이름을 골라주세요';
+    var grid = $('name-grid');
+    grid.innerHTML = '';
+    (bootstrap.studentsByGroup[selGroup.group_id] || []).forEach(function (s) {
+      var b = document.createElement('button');
+      b.className = 'choice-btn';
+      b.textContent = s.name;
+      b.onclick = function () { selStudent = s; showPin('student'); };
+      grid.appendChild(b);
+    });
+    show('screen-name');
+  }
+
+  function showPin(mode) {
+    pinMode = mode;
+    pinBuffer = '';
+    updateDots();
+    $('pin-msg').textContent = '';
+    if (mode === 'student') {
+      $('pin-title').textContent = selStudent.name + ' — 비밀번호 4자리를 눌러주세요';
+      $('pin-back').onclick = function () { renderNames(); };
+    } else {
+      $('pin-title').textContent = '관리자 PIN을 입력하세요';
+      $('pin-back').onclick = function () { renderGroups(); };
+    }
+    renderPad();
+    show('screen-pin');
+  }
+
+  function renderPad() {
+    var pad = $('pin-pad');
+    pad.innerHTML = '';
+    ['1','2','3','4','5','6','7','8','9','지우기','0','전체삭제'].forEach(function (k) {
+      var b = document.createElement('button');
+      b.className = 'pin-key' + (isNaN(k) ? ' fn' : '');
+      b.textContent = k;
+      b.onclick = function () { onKey(k); };
+      pad.appendChild(b);
+    });
+  }
+
+  function updateDots() {
+    var dots = document.querySelectorAll('.pin-dot');
+    for (var i = 0; i < 4; i++) dots[i].classList.toggle('filled', i < pinBuffer.length);
+  }
+
+  function onKey(k) {
+    if (k === '지우기') pinBuffer = pinBuffer.slice(0, -1);
+    else if (k === '전체삭제') pinBuffer = '';
+    else if (pinBuffer.length < 4) pinBuffer += k;
+    updateDots();
+    if (pinBuffer.length === 4) submitPin();
+  }
+
+  function submitPin() {
+    $('pin-msg').textContent = '확인 중...';
+    $('pin-msg').style.color = 'var(--muted)';
+    var done = function (res) {
+      if (res.ok) {
+        var sess = { token: res.token, role: res.role };
+        if (res.student) { sess.student = res.student; }
+        saveSession(sess);
+        showHome(sess);
+      } else {
+        pinBuffer = '';
+        updateDots();
+        $('pin-msg').style.color = 'var(--danger)';
+        $('pin-msg').textContent = res.message || '다시 해보세요.';
+      }
+    };
+    if (pinMode === 'student') Server.call('loginStudent', [selStudent.student_id, pinBuffer], done);
+    else Server.call('loginTeacher', [pinBuffer], done);
+  }
+
+  function showHome(sess) {
+    if (sess.role === 'teacher') {
+      $('home-hello').textContent = '선생님, 안녕하세요!';
+      $('home-note').textContent = '선생님 현황판(T-01~03)은 WBS 4.x에서 이 화면을 교체합니다.';
+    } else {
+      var name = sess.student ? sess.student.name : '';
+      $('home-hello').textContent = name + ' 님, 환영해요!';
+      $('home-note').textContent = '오늘의 숙제 화면(S-01)은 WBS 3.1에서 이 화면을 교체합니다.';
+    }
+    show('screen-home');
+  }
+
+  function logout() {
+    localStorage.removeItem(SESSION_KEY);
+    selGroup = selStudent = null;
+    if (bootstrap) renderGroups(); else loadBootstrap();
+  }
+
+  return {
+    init: init,
+    showGroups: renderGroups,
+    showTeacherLogin: function () { showPin('teacher'); },
+    logout: logout
+  };
+})();
+
+App.init();
+
+// ===== 서비스워커 등록 (PWA 설치·오프라인 셸) =====
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  navigator.serviceWorker.register('sw.js');
+}
+</script>
+</body>
+</html>
