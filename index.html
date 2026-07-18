@@ -72,6 +72,49 @@
   .loading { text-align: center; color: var(--muted); padding: 48px 0; }
   .hidden { display: none; }
   .offline-note { text-align: center; color: var(--muted); font-size: 12px; padding: 8px 0; }
+
+  /* ===== S-01 오늘의 숙제 ===== */
+  .dash-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+  .dash-date { font-size: 14px; color: var(--muted); }
+  .dash-name { font-size: 18px; font-weight: bold; }
+  .dash-logout { background: none; border: none; color: var(--muted); font-size: 12px; text-decoration: underline; cursor: pointer; }
+  .chips { display: flex; gap: 8px; margin: 10px 0 4px; }
+  .chip { background: var(--card); border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: bold; box-shadow: 0 1px 4px rgba(27,35,64,.06); }
+  .chip.point { color: #b8860b; }
+  .chip.streak { color: #e05d38; }
+  .tier-box { background: var(--card); border-radius: 12px; padding: 10px 14px; margin: 10px 0; box-shadow: 0 1px 4px rgba(27,35,64,.06); }
+  .tier-row { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .tier-row b { color: var(--text); }
+  .tier-bar { height: 8px; border-radius: 4px; background: #e3e7f5; overflow: hidden; }
+  .tier-bar > div { height: 100%; background: linear-gradient(90deg, var(--primary), #7b96ff); border-radius: 4px; }
+  .awards { background: #fffbe8; border: 1px solid #f3e3a0; border-radius: 12px; padding: 10px 14px; margin: 8px 0; }
+  .awards .aw-title { font-size: 12px; color: #9a7b00; font-weight: bold; margin-bottom: 4px; }
+  .awards .aw-row { display: flex; justify-content: space-between; font-size: 13px; padding: 2px 0; }
+  .awards .aw-row b { color: #b8860b; }
+  .today-progress { margin: 14px 0 6px; }
+  .today-progress .tp-label { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; }
+  .tp-bar { height: 10px; border-radius: 5px; background: #e3e7f5; overflow: hidden; }
+  .tp-bar > div { height: 100%; background: #34c77b; border-radius: 5px; transition: width .3s; }
+  .cards { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; padding-bottom: 24px; }
+  .hw-card { background: var(--card); border-radius: 14px; padding: 14px; display: flex; align-items: center; gap: 12px;
+    box-shadow: 0 2px 8px rgba(27,35,64,.06); border-left: 5px solid transparent; cursor: pointer; }
+  .hw-card:active { transform: scale(.985); }
+  .hw-card.st-redo { border-left-color: var(--danger); }
+  .hw-card.st-todo { border-left-color: var(--primary); }
+  .hw-card.st-doing { border-left-color: #eab308; }
+  .hw-card.st-done { border-left-color: #34c77b; opacity: .62; }
+  .hw-icon { font-size: 22px; width: 34px; text-align: center; flex-shrink: 0; }
+  .hw-main { flex: 1; min-width: 0; }
+  .hw-subject { font-size: 11px; font-weight: bold; color: var(--primary); }
+  .hw-label { font-size: 15px; font-weight: bold; margin: 1px 0; }
+  .hw-meta { font-size: 12px; color: var(--muted); }
+  .hw-meta .overdue { color: var(--danger); font-weight: bold; }
+  .hw-status { font-size: 12px; font-weight: bold; flex-shrink: 0; }
+  .st-redo .hw-status { color: var(--danger); }
+  .st-todo .hw-status { color: var(--primary); }
+  .st-doing .hw-status { color: #b8860b; }
+  .st-done .hw-status { color: #189a58; }
+  .empty-note { text-align: center; color: var(--muted); font-size: 14px; padding: 40px 0; line-height: 1.7; }
 </style>
 </head>
 <body>
@@ -108,13 +151,41 @@
     <div class="pin-pad" id="pin-pad"></div>
   </div>
 
-  <!-- 로그인 후 자리표시 (3.1 학습 대시보드 / 4.1 현황판에서 교체) -->
+  <!-- 선생님 자리표시 (4.1 현황판에서 교체) -->
   <div id="screen-home" class="hidden">
     <div class="home-card">
       <div class="hello" id="home-hello"></div>
       <div class="note" id="home-note"></div>
       <button class="logout-btn" onclick="App.logout()">로그아웃</button>
     </div>
+  </div>
+
+  <!-- S-01 오늘의 숙제 (학생 대시보드) -->
+  <div id="screen-dash" class="hidden">
+    <div class="dash-head">
+      <div>
+        <div class="dash-date" id="dash-date"></div>
+        <div class="dash-name" id="dash-name"></div>
+      </div>
+      <button class="dash-logout" onclick="App.logout()">로그아웃</button>
+    </div>
+    <div class="chips">
+      <div class="chip point" id="chip-point">⭐ 0P</div>
+      <div class="chip streak" id="chip-streak">🔥 0일</div>
+    </div>
+    <div class="tier-box" id="tier-box">
+      <div class="tier-row"><span>내 등급 <b id="tier-cur">Starter</b></span><span id="tier-need"></span></div>
+      <div class="tier-bar"><div id="tier-fill" style="width:0%"></div></div>
+    </div>
+    <div class="awards hidden" id="awards-box">
+      <div class="aw-title">오늘 받은 포인트</div>
+      <div id="awards-list"></div>
+    </div>
+    <div class="today-progress">
+      <div class="tp-label"><b>오늘의 숙제</b><span id="tp-count">0/0 완료</span></div>
+      <div class="tp-bar"><div id="tp-fill" style="width:0%"></div></div>
+    </div>
+    <div class="cards" id="hw-cards"></div>
   </div>
 </div>
 
@@ -126,13 +197,14 @@ var API_URL = 'https://script.google.com/macros/s/AKfycbw7YF-4dqomyexzQFUM3HiVLw
 // ===== 서버 호출 래퍼 =====
 // file:// 로 직접 열면(개발 미리보기) mock, 그 외에는 GAS JSON API를 fetch로 호출
 var Server = (function () {
-  var useMock = location.protocol === 'file:';
+  var useMock = location.protocol === 'file:' || /[?&]mock=1/.test(location.search);
   if (!useMock) {
     var payloadOf = {
       getLoginBootstrap: function () { return {}; },
       loginStudent: function (a) { return { studentId: a[0], pin: a[1] }; },
       loginTeacher: function (a) { return { pin: a[0] }; },
-      verifySession: function (a) { return { token: a[0] }; }
+      verifySession: function (a) { return { token: a[0] }; },
+      getTodayDashboard: function (a) { return { token: a[0] }; }
     };
     return {
       call: function (fn, args, onOk, onErr) {
@@ -174,6 +246,22 @@ var Server = (function () {
       if (token === 'mock-token') return { ok: true, role: 'student', studentId: 'S001' };
       if (token === 'mock-teacher') return { ok: true, role: 'teacher' };
       return { ok: false };
+    },
+    getTodayDashboard: function () {
+      return { ok: true, today: '2026-07-18',
+        cards: [
+          { item_id: 'AI-1', subject: '기사', label: 'Article 2 · 본문 녹음', seq: '', action_type: 'record', status: '재제출요청', due_date: '2026-07-17', due_time: '21:00', overdue: true },
+          { item_id: 'AI-2', subject: '기사', label: 'Article 3 · 단어 듣기', seq: '', action_type: 'listen', status: '미시작', due_date: '2026-07-18', due_time: '21:00', overdue: false },
+          { item_id: 'AI-3', subject: 'Voca', label: 'Voca 07 암송', seq: '1/3', action_type: 'record', status: '진행중', due_date: '2026-07-18', due_time: '21:00', overdue: false },
+          { item_id: 'AI-4', subject: 'QnA', label: 'Q&A 서술형 답안', seq: '', action_type: 'write', status: '미시작', due_date: '2026-07-18', due_time: '21:00', overdue: false },
+          { item_id: 'AI-5', subject: '리스닝', label: 'Unit 2 · p.14 듣기', seq: '', action_type: 'listen', status: '제출완료', due_date: '2026-07-18', due_time: '21:00', overdue: false }
+        ],
+        progress: { done: 1, total: 5 },
+        points: { total: 275, todayAwards: [
+          { label: '기본 제출 +10', amount: 10 }, { label: '정시 제출 +5', amount: 5 }, { label: 'A반 2등 제출 +5', amount: 5 }
+        ] },
+        tier: { current: 'Starter', next: 'Builder', progress: 275 / 300, need: 25 },
+        streak: 5 };
     }
   };
   return { call: function (fn, args, onOk) { setTimeout(function () { onOk(MOCK[fn].apply(null, args || [])); }, 150); } };
@@ -187,7 +275,7 @@ var App = (function () {
 
   function $(id) { return document.getElementById(id); }
   function show(id) {
-    ['screen-loading','screen-group','screen-name','screen-pin','screen-home'].forEach(function (s) {
+    ['screen-loading','screen-group','screen-name','screen-pin','screen-home','screen-dash'].forEach(function (s) {
       $(s).classList.toggle('hidden', s !== id);
     });
   }
@@ -310,12 +398,121 @@ var App = (function () {
     if (sess.role === 'teacher') {
       $('home-hello').textContent = '선생님, 안녕하세요!';
       $('home-note').textContent = '선생님 현황판(T-01~03)은 WBS 4.x에서 이 화면을 교체합니다.';
+      show('screen-home');
     } else {
-      var name = sess.student ? sess.student.name : '';
-      $('home-hello').textContent = name + ' 님, 환영해요!';
-      $('home-note').textContent = '오늘의 숙제 화면(S-01)은 WBS 3.1에서 이 화면을 교체합니다.';
+      loadDashboard(sess);
     }
-    show('screen-home');
+  }
+
+  // ===== S-01 오늘의 숙제 =====
+  var ACTION_META = {
+    listen: { icon: '🎧', label: '듣기' },
+    record: { icon: '🎤', label: '녹음' },
+    read:   { icon: '📖', label: '읽기' },
+    write:  { icon: '📷', label: '사진 제출' }
+  };
+  var STATUS_CLASS = { '재제출요청': 'st-redo', '미시작': 'st-todo', '진행중': 'st-doing', '제출완료': 'st-done', '면제': 'st-done' };
+  var STATUS_LABEL = { '재제출요청': '다시 제출!', '미시작': '시작하기', '진행중': '이어서 하기', '제출완료': '완료 ✓', '면제': '면제' };
+
+  function loadDashboard(sess) {
+    show('screen-loading');
+    Server.call('getTodayDashboard', [sess.token], function (res) {
+      if (!res.ok) {
+        if (res.needLogin) { localStorage.removeItem(SESSION_KEY); loadBootstrap(); return; }
+        alert(res.message || '불러오지 못했어요. 다시 해보세요.');
+        return;
+      }
+      renderDashboard(sess, res);
+    });
+  }
+
+  function renderDashboard(sess, d) {
+    var dt = new Date(d.today + 'T00:00:00');
+    var days = ['일', '월', '화', '수', '목', '금', '토'];
+    $('dash-date').textContent = (dt.getMonth() + 1) + '월 ' + dt.getDate() + '일 ' + days[dt.getDay()] + '요일';
+    $('dash-name').textContent = (sess.student ? sess.student.name : '') + ' 님, 오늘도 화이팅!';
+    $('chip-point').textContent = '⭐ ' + d.points.total + 'P';
+    $('chip-streak').textContent = d.streak > 0 ? '🔥 ' + d.streak + '일 연속' : '🌱 오늘부터 시작!';
+
+    $('tier-cur').textContent = d.tier.current || 'Starter';
+    $('tier-need').textContent = d.tier.next ? d.tier.next + '까지 ' + d.tier.need + 'P' : '최고 등급!';
+    $('tier-fill').style.width = Math.round(Math.min(1, Math.max(0, d.tier.progress)) * 100) + '%';
+
+    var awBox = $('awards-box');
+    if (d.points.todayAwards.length) {
+      awBox.classList.remove('hidden');
+      $('awards-list').innerHTML = '';
+      d.points.todayAwards.forEach(function (a) {
+        var row = document.createElement('div');
+        row.className = 'aw-row';
+        var name = document.createElement('span');
+        // display_label에 금액(+N)이 이미 있으면 떼고, 금액은 항상 amount 컬럼 기준으로 표시
+        name.textContent = String(a.label).replace(/\s*\+\d+\s*P?\s*$/, '');
+        var amt = document.createElement('b');
+        amt.textContent = '+' + a.amount + 'P';
+        row.appendChild(name); row.appendChild(amt);
+        $('awards-list').appendChild(row);
+      });
+    } else {
+      awBox.classList.add('hidden');
+    }
+
+    $('tp-count').textContent = d.progress.done + '/' + d.progress.total + ' 완료';
+    $('tp-fill').style.width = d.progress.total ? Math.round(d.progress.done / d.progress.total * 100) + '%' : '0%';
+
+    // 서버 정렬과 무관하게 화면에서도 상태 우선 정렬을 보장 (재제출요청→미시작→진행중→완료→면제)
+    var ORDER = { '재제출요청': 0, '미시작': 1, '진행중': 2, '제출완료': 3, '면제': 4 };
+    d.cards.sort(function (x, y) {
+      var s = (ORDER[x.status] !== undefined ? ORDER[x.status] : 9) - (ORDER[y.status] !== undefined ? ORDER[y.status] : 9);
+      return s !== 0 ? s : String(x.due_date).localeCompare(String(y.due_date));
+    });
+    var wrap = $('hw-cards');
+    wrap.innerHTML = '';
+    if (!d.cards.length) {
+      var empty = document.createElement('div');
+      empty.className = 'empty-note';
+      empty.textContent = '오늘은 숙제가 없어요! 🎉\n푹 쉬어도 좋아요.';
+      wrap.appendChild(empty);
+    }
+    d.cards.forEach(function (c) {
+      var meta = ACTION_META[c.action_type] || ACTION_META.listen;
+      var card = document.createElement('div');
+      card.className = 'hw-card ' + (STATUS_CLASS[c.status] || 'st-todo');
+      var icon = document.createElement('div');
+      icon.className = 'hw-icon';
+      icon.textContent = meta.icon;
+      var main = document.createElement('div');
+      main.className = 'hw-main';
+      var subj = document.createElement('div');
+      subj.className = 'hw-subject';
+      subj.textContent = c.subject + ' · ' + meta.label;
+      var label = document.createElement('div');
+      label.className = 'hw-label';
+      label.textContent = c.label + (c.seq ? ' (' + c.seq + ')' : '');
+      var metaRow = document.createElement('div');
+      metaRow.className = 'hw-meta';
+      if (c.overdue) {
+        var od = document.createElement('span');
+        od.className = 'overdue';
+        od.textContent = '마감 지남 · ';
+        metaRow.appendChild(od);
+      }
+      metaRow.appendChild(document.createTextNode('마감 ' + (c.due_time || '21:00')));
+      main.appendChild(subj); main.appendChild(label); main.appendChild(metaRow);
+      var st = document.createElement('div');
+      st.className = 'hw-status';
+      st.textContent = STATUS_LABEL[c.status] || c.status;
+      card.appendChild(icon); card.appendChild(main); card.appendChild(st);
+      card.onclick = function () { openItem(c); };
+      wrap.appendChild(card);
+    });
+    show('screen-dash');
+  }
+
+  function openItem(c) {
+    if (c.status === '제출완료' || c.status === '면제') return;
+    var meta = ACTION_META[c.action_type] || ACTION_META.listen;
+    alert(meta.label + ' 화면은 다음 업데이트에서 열려요!\n(' + c.label + ')');
   }
 
   function logout() {
