@@ -115,6 +115,35 @@
   .st-doing .hw-status { color: #b8860b; }
   .st-done .hw-status { color: #189a58; }
   .empty-note { text-align: center; color: var(--muted); font-size: 14px; padding: 40px 0; line-height: 1.7; }
+
+  /* ===== S-02 듣기 학습 ===== */
+  .ls-head { margin-bottom: 8px; }
+  .ls-subject { font-size: 12px; font-weight: bold; color: var(--primary); }
+  .ls-title { font-size: 19px; font-weight: bold; margin-top: 2px; }
+  .ls-count { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .ls-count b { color: var(--primary); }
+  .ls-transcript {
+    background: var(--card); border-radius: 14px; padding: 16px; margin: 12px 0;
+    font-size: 15px; line-height: 1.9; max-height: 42vh; overflow-y: auto;
+    box-shadow: 0 2px 8px rgba(27,35,64,.06); white-space: pre-wrap;
+  }
+  .ls-transcript.empty { color: var(--muted); text-align: center; font-size: 14px; }
+  .ls-progress { margin: 14px 0 4px; }
+  .ls-bar { height: 10px; border-radius: 5px; background: #e3e7f5; overflow: hidden; }
+  .ls-bar > div { height: 100%; background: var(--primary); border-radius: 5px; }
+  .ls-time { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .ls-controls { display: flex; justify-content: center; gap: 14px; margin: 16px 0; }
+  .ls-btn {
+    border: none; border-radius: 50%; width: 62px; height: 62px; font-size: 24px;
+    background: var(--card); color: var(--text); box-shadow: 0 2px 8px rgba(27,35,64,.1); cursor: pointer;
+  }
+  .ls-btn.main { width: 78px; height: 78px; font-size: 30px; background: var(--primary); color: #fff; }
+  .ls-btn:active { transform: scale(.95); }
+  .ls-btn:disabled { opacity: .4; }
+  .ls-msg { text-align: center; min-height: 22px; font-size: 14px; font-weight: bold; }
+  .ls-msg.good { color: #189a58; }
+  .ls-msg.bad { color: var(--danger); }
+  .ls-note { text-align: center; font-size: 11px; color: var(--muted); margin-top: 6px; }
 </style>
 </head>
 <body>
@@ -187,6 +216,27 @@
     </div>
     <div class="cards" id="hw-cards"></div>
   </div>
+
+  <!-- S-02 듣기 학습 -->
+  <div id="screen-listen" class="hidden">
+    <button class="back-btn" onclick="App.closeListen()">&larr; 오늘의 숙제로</button>
+    <div class="ls-head">
+      <div class="ls-subject" id="ls-subject"></div>
+      <div class="ls-title" id="ls-title"></div>
+      <div class="ls-count">🎧 유효 듣기 <b id="ls-count">0</b>/<span id="ls-required">1</span>회</div>
+    </div>
+    <div class="ls-transcript" id="ls-transcript"></div>
+    <div class="ls-progress">
+      <div class="ls-bar"><div id="ls-fill" style="width:0%"></div></div>
+      <div class="ls-time"><span id="ls-cur">0:00</span><span id="ls-dur">-:--</span></div>
+    </div>
+    <div class="ls-controls">
+      <button class="ls-btn" id="ls-restart" title="처음부터">⏮</button>
+      <button class="ls-btn main" id="ls-play" title="재생">▶</button>
+    </div>
+    <div class="ls-msg" id="ls-msg"></div>
+    <div class="ls-note">끝까지 들으면 자동으로 기록돼요. 앞으로 넘기기는 없어요!</div>
+  </div>
 </div>
 
 <script>
@@ -204,7 +254,9 @@ var Server = (function () {
       loginStudent: function (a) { return { studentId: a[0], pin: a[1] }; },
       loginTeacher: function (a) { return { pin: a[0] }; },
       verifySession: function (a) { return { token: a[0] }; },
-      getTodayDashboard: function (a) { return { token: a[0] }; }
+      getTodayDashboard: function (a) { return { token: a[0] }; },
+      getListenData: function (a) { return { token: a[0], itemId: a[1] }; },
+      recordListenSession: function (a) { return { token: a[0], itemId: a[1], startedAt: a[2], completed: a[3], skipped: a[4] }; }
     };
     return {
       call: function (fn, args, onOk, onErr) {
@@ -262,9 +314,31 @@ var Server = (function () {
         ] },
         tier: { current: 'Starter', next: 'Builder', progress: 275 / 300, need: 25 },
         streak: 5 };
+    },
+    _mockValid: 0,
+    _silentWav: function (sec) {
+      var rate = 8000, n = Math.floor(rate * sec);
+      var buf = new ArrayBuffer(44 + n), v = new DataView(buf);
+      var ws = function (o, s) { for (var i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+      ws(0, 'RIFF'); v.setUint32(4, 36 + n, true); ws(8, 'WAVEfmt '); v.setUint32(16, 16, true);
+      v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, rate, true); v.setUint32(28, rate, true);
+      v.setUint16(32, 1, true); v.setUint16(34, 8, true); ws(36, 'data'); v.setUint32(40, n, true);
+      new Uint8Array(buf, 44).fill(128);
+      return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+    },
+    getListenData: function (token, itemId) {
+      return { ok: true, item_id: itemId, subject: '기사', label: 'Article 3 · 단어 듣기',
+        transcript: 'apple 사과\nbanana 바나나\ncherry 체리\n(mock 음원은 2초 무음입니다)',
+        audio_url: this._silentWav(2), required: 2, valid_count: this._mockValid, status: '미시작' };
+    },
+    recordListenSession: function (token, itemId, startedAt, completed, skipped) {
+      if (completed && !skipped) this._mockValid++;
+      var done = this._mockValid >= 2;
+      return { ok: true, valid_count: this._mockValid, required: 2,
+        item_status: done ? '제출완료' : '진행중', just_completed: done && this._mockValid === 2 };
     }
   };
-  return { call: function (fn, args, onOk) { setTimeout(function () { onOk(MOCK[fn].apply(null, args || [])); }, 150); } };
+  return { call: function (fn, args, onOk) { setTimeout(function () { onOk(MOCK[fn].apply(MOCK, args || [])); }, 150); } };
 })();
 
 var App = (function () {
@@ -275,7 +349,7 @@ var App = (function () {
 
   function $(id) { return document.getElementById(id); }
   function show(id) {
-    ['screen-loading','screen-group','screen-name','screen-pin','screen-home','screen-dash'].forEach(function (s) {
+    ['screen-loading','screen-group','screen-name','screen-pin','screen-home','screen-dash','screen-listen'].forEach(function (s) {
       $(s).classList.toggle('hidden', s !== id);
     });
   }
@@ -511,8 +585,158 @@ var App = (function () {
 
   function openItem(c) {
     if (c.status === '제출완료' || c.status === '면제') return;
+    if (c.action_type === 'listen') { openListen(c); return; }
     var meta = ACTION_META[c.action_type] || ACTION_META.listen;
     alert(meta.label + ' 화면은 다음 업데이트에서 열려요!\n(' + c.label + ')');
+  }
+
+  // ===== S-02 듣기 학습 =====
+  var Listen = { audio: null, itemId: null, sessionStart: null, maxReached: 0, skipped: false, playing: false, finished: false };
+
+  function fmtTime(sec) {
+    if (!isFinite(sec) || sec < 0) return '-:--';
+    var m = Math.floor(sec / 60), s = Math.floor(sec % 60);
+    return m + ':' + (s < 10 ? '0' : '') + s;
+  }
+
+  function openListen(c) {
+    show('screen-loading');
+    var sess = loadSession();
+    Server.call('getListenData', [sess.token, c.item_id], function (res) {
+      if (!res.ok) {
+        if (res.needLogin) { localStorage.removeItem(SESSION_KEY); loadBootstrap(); return; }
+        alert(res.message || '불러오지 못했어요.');
+        loadDashboard(sess);
+        return;
+      }
+      setupListen(res);
+    });
+  }
+
+  function setupListen(d) {
+    Listen.itemId = d.item_id;
+    Listen.sessionStart = null;
+    Listen.maxReached = 0;
+    Listen.skipped = false;
+    Listen.playing = false;
+    Listen.finished = false;
+
+    $('ls-subject').textContent = d.subject;
+    $('ls-title').textContent = d.label;
+    $('ls-count').textContent = d.valid_count;
+    $('ls-required').textContent = d.required;
+    var tr = $('ls-transcript');
+    if (d.transcript) { tr.textContent = d.transcript; tr.classList.remove('empty'); }
+    else { tr.textContent = '🎵 음원을 들으며 따라 읽어보세요'; tr.classList.add('empty'); }
+    $('ls-msg').textContent = '';
+    $('ls-msg').className = 'ls-msg';
+    $('ls-fill').style.width = '0%';
+    $('ls-cur').textContent = '0:00';
+    $('ls-dur').textContent = '-:--';
+    $('ls-play').textContent = '▶';
+    $('ls-play').disabled = false;
+
+    if (Listen.audio) { Listen.audio.pause(); Listen.audio.src = ''; }
+    var audio = new Audio();
+    audio.preload = 'metadata';
+    audio.src = d.audio_url;
+    Listen.audio = audio;
+
+    // OS 미디어 컨트롤의 탐색 버튼 미등록 (설계결정문서 5.3 — MediaSession seek 핸들러 등록 안 함)
+    if ('mediaSession' in navigator) {
+      ['seekbackward', 'seekforward', 'seekto'].forEach(function (a) {
+        try { navigator.mediaSession.setActionHandler(a, null); } catch (e) {}
+      });
+    }
+
+    audio.addEventListener('loadedmetadata', function () { $('ls-dur').textContent = fmtTime(audio.duration); });
+    audio.addEventListener('timeupdate', function () {
+      if (audio.currentTime > Listen.maxReached) Listen.maxReached = audio.currentTime;
+      if (audio.duration) $('ls-fill').style.width = Math.min(100, audio.currentTime / audio.duration * 100) + '%';
+      $('ls-cur').textContent = fmtTime(audio.currentTime);
+    });
+    // UI 차단을 우회한 앞으로 건너뛰기 감지 (2차 안전장치). 되감기는 허용
+    audio.addEventListener('seeking', function () {
+      if (audio.currentTime > Listen.maxReached + 1.0) Listen.skipped = true;
+    });
+    audio.addEventListener('ended', function () { onListenEnded(); });
+    audio.addEventListener('error', function () {
+      $('ls-msg').textContent = '음원을 불러올 수 없어요. 선생님께 알려주세요.';
+      $('ls-msg').className = 'ls-msg bad';
+      $('ls-play').disabled = true;
+    });
+
+    $('ls-play').onclick = function () {
+      if (Listen.playing) {
+        audio.pause();
+        Listen.playing = false;
+        $('ls-play').textContent = '▶';
+      } else {
+        if (!Listen.sessionStart) Listen.sessionStart = new Date();
+        audio.play();
+        Listen.playing = true;
+        $('ls-play').textContent = '⏸';
+        $('ls-msg').textContent = '';
+        $('ls-msg').className = 'ls-msg';
+      }
+    };
+    $('ls-restart').onclick = function () {
+      // 처음부터 = 새 세션 시작 (되감기 허용, 이전 진행은 기록하지 않음)
+      audio.currentTime = 0;
+      Listen.maxReached = 0;
+      Listen.skipped = false;
+      Listen.sessionStart = new Date();
+      if (!Listen.playing) { audio.play(); Listen.playing = true; $('ls-play').textContent = '⏸'; }
+    };
+    show('screen-listen');
+  }
+
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+  function tsStr(d) {
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' +
+      pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
+  }
+
+  function onListenEnded() {
+    Listen.playing = false;
+    Listen.finished = true;
+    $('ls-play').textContent = '▶';
+    $('ls-msg').textContent = '기록 중...';
+    var sess = loadSession();
+    var started = Listen.sessionStart ? tsStr(Listen.sessionStart) : tsStr(new Date());
+    Server.call('recordListenSession', [sess.token, Listen.itemId, started, true, Listen.skipped], function (res) {
+      if (!res.ok) {
+        $('ls-msg').textContent = res.message || '기록에 실패했어요. 한 번 더 들어주세요.';
+        $('ls-msg').className = 'ls-msg bad';
+        return;
+      }
+      $('ls-count').textContent = res.valid_count;
+      $('ls-required').textContent = res.required;
+      if (res.just_completed) {
+        $('ls-msg').textContent = '🎉 유효 듣기 달성! 오늘의 숙제로 돌아가요';
+        $('ls-msg').className = 'ls-msg good';
+        setTimeout(function () { loadDashboard(sess); }, 1600);
+      } else if (Listen.skipped) {
+        $('ls-msg').textContent = '건너뛰기가 감지돼 이번 회차는 인정되지 않았어요. 처음부터 다시!';
+        $('ls-msg').className = 'ls-msg bad';
+        Listen.skipped = false;
+        Listen.maxReached = 0;
+        Listen.sessionStart = null;
+      } else {
+        $('ls-msg').textContent = '✅ 유효 듣기 1회 완료! (' + res.valid_count + '/' + res.required + ')';
+        $('ls-msg').className = 'ls-msg good';
+        Listen.sessionStart = null;
+        Listen.maxReached = 0;
+      }
+    });
+  }
+
+  function closeListen() {
+    if (Listen.playing && !Listen.finished) {
+      if (!confirm('아직 다 듣지 않았어요. 지금 나가면 이번 듣기는 인정되지 않아요. 나갈까요?')) return;
+    }
+    if (Listen.audio) { Listen.audio.pause(); }
+    loadDashboard(loadSession());
   }
 
   function logout() {
@@ -525,6 +749,7 @@ var App = (function () {
     init: init,
     showGroups: renderGroups,
     showTeacherLogin: function () { showPin('teacher'); },
+    closeListen: closeListen,
     logout: logout
   };
 })();
