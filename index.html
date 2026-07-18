@@ -144,6 +144,30 @@
   .ls-msg.good { color: #189a58; }
   .ls-msg.bad { color: var(--danger); }
   .ls-note { text-align: center; font-size: 11px; color: var(--muted); margin-top: 6px; }
+
+  /* ===== S-03 녹음·제출 ===== */
+  .rc-stage { background: var(--card); border-radius: 14px; padding: 24px 16px; margin: 14px 0;
+    text-align: center; box-shadow: 0 2px 8px rgba(27,35,64,.06); }
+  .rc-timer { font-size: 34px; font-weight: bold; letter-spacing: 2px; margin: 8px 0; }
+  .rc-state-label { font-size: 13px; color: var(--muted); min-height: 18px; }
+  .rc-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--danger);
+    margin-right: 6px; animation: rc-blink 1s infinite; vertical-align: 1px; }
+  @keyframes rc-blink { 50% { opacity: .2; } }
+  .rc-main-btn { border: none; border-radius: 999px; padding: 16px 34px; font-size: 17px; font-weight: bold;
+    color: #fff; background: var(--danger); cursor: pointer; margin-top: 12px; }
+  .rc-main-btn.rec { background: var(--danger); }
+  .rc-main-btn.stop { background: var(--text); }
+  .rc-main-btn.submit { background: var(--primary); }
+  .rc-main-btn:disabled { opacity: .5; }
+  .rc-main-btn:active { transform: scale(.97); }
+  .rc-sub-btn { border: none; background: none; color: var(--muted); font-size: 14px;
+    text-decoration: underline; cursor: pointer; margin-top: 14px; }
+  .rc-preview { width: 100%; margin-top: 12px; }
+  .rc-result { text-align: center; }
+  .rc-result .big { font-size: 40px; }
+  .rc-result .title { font-size: 18px; font-weight: bold; margin: 8px 0 4px; }
+  .rc-result .sub { font-size: 13px; color: var(--muted); }
+  .rc-awards { margin: 12px auto 0; max-width: 300px; text-align: left; }
 </style>
 </head>
 <body>
@@ -237,8 +261,41 @@
     <div class="ls-msg" id="ls-msg"></div>
     <div class="ls-note">끝까지 들으면 자동으로 기록돼요. 앞으로 넘기기는 없어요!</div>
   </div>
+
+  <!-- S-03 녹음·제출 -->
+  <div id="screen-record" class="hidden">
+    <button class="back-btn" id="rc-back">&larr; 오늘의 숙제로</button>
+    <div class="ls-head">
+      <div class="ls-subject" id="rc-subject"></div>
+      <div class="ls-title" id="rc-title"></div>
+      <div class="ls-count" id="rc-due"></div>
+    </div>
+
+    <!-- 녹음 전/중/미리듣기 -->
+    <div class="rc-stage" id="rc-stage">
+      <div class="rc-state-label" id="rc-state-label">녹음 버튼을 누르고 또박또박 읽어주세요</div>
+      <div class="rc-timer" id="rc-timer">0:00</div>
+      <button class="rc-main-btn rec" id="rc-main">🎤 녹음 시작</button>
+      <audio class="rc-preview hidden" id="rc-preview" controls></audio>
+      <div><button class="rc-sub-btn hidden" id="rc-again">다시 녹음하기</button></div>
+    </div>
+
+    <!-- 제출 완료 -->
+    <div class="rc-stage rc-result hidden" id="rc-done">
+      <div class="big">🎉</div>
+      <div class="title">제출 완료!</div>
+      <div class="sub" id="rc-done-info"></div>
+      <div class="awards rc-awards hidden" id="rc-awards-box">
+        <div class="aw-title">받은 포인트</div>
+        <div id="rc-awards-list"></div>
+      </div>
+      <button class="rc-main-btn submit" id="rc-done-back">오늘의 숙제로</button>
+    </div>
+    <div class="ls-msg" id="rc-msg"></div>
+  </div>
 </div>
 
+<script src="recorder.js"></script>
 <script>
 // ===== 설정 =====
 // GAS 웹앱(Api.gs) 배포 URL. 재배포 시 "기존 배포 수정 → 새 버전"을 쓰면 이 URL은 바뀌지 않는다.
@@ -256,7 +313,8 @@ var Server = (function () {
       verifySession: function (a) { return { token: a[0] }; },
       getTodayDashboard: function (a) { return { token: a[0] }; },
       getListenData: function (a) { return { token: a[0], itemId: a[1] }; },
-      recordListenSession: function (a) { return { token: a[0], itemId: a[1], startedAt: a[2], completed: a[3], skipped: a[4] }; }
+      recordListenSession: function (a) { return { token: a[0], itemId: a[1], startedAt: a[2], completed: a[3], skipped: a[4] }; },
+      submitRecording: function (a) { return { token: a[0], itemId: a[1], base64: a[2], mimeType: a[3] }; }
     };
     return {
       call: function (fn, args, onOk, onErr) {
@@ -335,7 +393,16 @@ var Server = (function () {
       if (completed && !skipped) this._mockValid++;
       var done = this._mockValid >= 2;
       return { ok: true, valid_count: this._mockValid, required: 2,
-        item_status: done ? '제출완료' : '진행중', just_completed: done && this._mockValid === 2 };
+        item_status: done ? '제출완료' : '진행중', just_completed: done && this._mockValid === 2,
+        awards: done ? [{ label: '기본 제출', amount: 10 }, { label: '정시 제출', amount: 5 }] : [] };
+    },
+    _mockAttempt: 0,
+    submitRecording: function (token, itemId, base64, mimeType) {
+      this._mockAttempt++;
+      return { ok: true, attempt_no: this._mockAttempt, submitted_at: '21:05',
+        flag: this._mockAttempt >= 3 ? '해시중복의심' : '',
+        awards: this._mockAttempt === 1 ? [{ label: '기본 제출', amount: 10 }, { label: 'A반 1등 제출', amount: 8 }] : [],
+        sizeKB: Math.round((base64 || '').length * 3 / 4 / 1024) };
     }
   };
   return { call: function (fn, args, onOk) { setTimeout(function () { onOk(MOCK[fn].apply(MOCK, args || [])); }, 150); } };
@@ -349,7 +416,7 @@ var App = (function () {
 
   function $(id) { return document.getElementById(id); }
   function show(id) {
-    ['screen-loading','screen-group','screen-name','screen-pin','screen-home','screen-dash','screen-listen'].forEach(function (s) {
+    ['screen-loading','screen-group','screen-name','screen-pin','screen-home','screen-dash','screen-listen','screen-record'].forEach(function (s) {
       $(s).classList.toggle('hidden', s !== id);
     });
   }
@@ -586,8 +653,154 @@ var App = (function () {
   function openItem(c) {
     if (c.status === '제출완료' || c.status === '면제') return;
     if (c.action_type === 'listen') { openListen(c); return; }
+    if (c.action_type === 'record' || c.action_type === 'read') { openRecord(c); return; }
     var meta = ACTION_META[c.action_type] || ACTION_META.listen;
     alert(meta.label + ' 화면은 다음 업데이트에서 열려요!\n(' + c.label + ')');
+  }
+
+  // ===== S-03 녹음·제출 =====
+  var Rec = { item: null, blob: null, mimeType: '', timer: null, state: 'idle' }; // idle | recording | preview | uploading | done
+
+  function rcSetState(state) {
+    Rec.state = state;
+    var main = $('rc-main');
+    var label = $('rc-state-label');
+    $('rc-preview').classList.toggle('hidden', state !== 'preview');
+    $('rc-again').classList.toggle('hidden', state !== 'preview');
+    $('rc-stage').classList.toggle('hidden', state === 'done');
+    $('rc-done').classList.toggle('hidden', state !== 'done');
+    if (state === 'idle') {
+      main.className = 'rc-main-btn rec';
+      main.textContent = '🎤 녹음 시작';
+      main.disabled = false;
+      label.textContent = '녹음 버튼을 누르고 또박또박 읽어주세요';
+      $('rc-timer').textContent = '0:00';
+    } else if (state === 'recording') {
+      main.className = 'rc-main-btn stop';
+      main.textContent = '⏹ 녹음 끝내기';
+      main.disabled = false;
+      label.innerHTML = '<span class="rc-dot"></span>녹음 중...';
+    } else if (state === 'preview') {
+      main.className = 'rc-main-btn submit';
+      main.textContent = '📤 선생님께 제출하기';
+      main.disabled = false;
+      label.textContent = '들어보고 마음에 들면 제출해요';
+    } else if (state === 'uploading') {
+      main.className = 'rc-main-btn submit';
+      main.textContent = '보내는 중...';
+      main.disabled = true;
+      label.textContent = '조금만 기다려주세요';
+    }
+  }
+
+  function rcStartTimer() {
+    var t0 = Date.now();
+    Rec.timer = setInterval(function () {
+      $('rc-timer').textContent = fmtTime((Date.now() - t0) / 1000);
+    }, 250);
+  }
+  function rcStopTimer() { if (Rec.timer) { clearInterval(Rec.timer); Rec.timer = null; } }
+
+  function openRecord(c) {
+    Rec.item = c;
+    Rec.blob = null;
+    $('rc-subject').textContent = c.subject + ' · ' + (ACTION_META[c.action_type] || ACTION_META.record).label;
+    $('rc-title').textContent = c.label + (c.seq ? ' (' + c.seq + ')' : '');
+    $('rc-due').textContent = '마감 ' + (c.due_time || '21:00') + (c.overdue ? ' · 마감 지남' : '');
+    $('rc-msg').textContent = '';
+    $('rc-msg').className = 'ls-msg';
+    $('rc-awards-box').classList.add('hidden');
+    rcSetState('idle');
+    show('screen-record');
+
+    $('rc-back').onclick = function () {
+      if (Rec.state === 'recording') {
+        if (!confirm('녹음 중이에요. 나가면 지금 녹음은 사라져요. 나갈까요?')) return;
+        Recorder.cancel();
+        rcStopTimer();
+      }
+      loadDashboard(loadSession());
+    };
+    $('rc-done-back').onclick = function () { loadDashboard(loadSession()); };
+    $('rc-again').onclick = function () {
+      Rec.blob = null;
+      $('rc-preview').src = '';
+      rcSetState('idle');
+    };
+    $('rc-main').onclick = rcMainAction;
+  }
+
+  function rcMainAction() {
+    if (Rec.state === 'idle') {
+      if (!window.Recorder || !Recorder.isSupported()) {
+        $('rc-msg').textContent = '이 브라우저는 녹음을 지원하지 않아요. 크롬이나 사파리로 열어주세요.';
+        $('rc-msg').className = 'ls-msg bad';
+        return;
+      }
+      Recorder.start().then(function () {
+        rcSetState('recording');
+        rcStartTimer();
+      }).catch(function () {
+        $('rc-msg').textContent = '마이크를 사용할 수 없어요. 마이크 권한을 허용해주세요.';
+        $('rc-msg').className = 'ls-msg bad';
+      });
+    } else if (Rec.state === 'recording') {
+      rcStopTimer();
+      Recorder.stop().then(function (r) {
+        Rec.blob = r.blob;
+        Rec.mimeType = r.mimeType;
+        $('rc-preview').src = URL.createObjectURL(r.blob);
+        rcSetState('preview');
+      }).catch(function () {
+        $('rc-msg').textContent = '녹음 저장에 실패했어요. 다시 해보세요.';
+        $('rc-msg').className = 'ls-msg bad';
+        rcSetState('idle');
+      });
+    } else if (Rec.state === 'preview') {
+      rcSubmit();
+    }
+  }
+
+  function rcSubmit() {
+    if (!Rec.blob) return;
+    rcSetState('uploading');
+    var sess = loadSession();
+    Recorder.blobToBase64(Rec.blob).then(function (b64) {
+      Server.call('submitRecording', [sess.token, Rec.item.item_id, b64, Rec.mimeType], function (res) {
+        if (!res.ok) {
+          if (res.needLogin) { localStorage.removeItem(SESSION_KEY); loadBootstrap(); return; }
+          $('rc-msg').textContent = res.message || '제출에 실패했어요. 다시 해보세요.';
+          $('rc-msg').className = 'ls-msg bad';
+          rcSetState('preview');
+          return;
+        }
+        $('rc-done-info').textContent = res.attempt_no + '회차 제출 · ' + res.submitted_at
+          + (res.flag ? ' · 확인 필요 표시됨' : '');
+        var box = $('rc-awards-box');
+        if (res.awards && res.awards.length) {
+          box.classList.remove('hidden');
+          var list = $('rc-awards-list');
+          list.innerHTML = '';
+          res.awards.forEach(function (a) {
+            var row = document.createElement('div');
+            row.className = 'aw-row';
+            var name = document.createElement('span');
+            name.textContent = String(a.label).replace(/\s*\+\d+\s*P?\s*$/, '');
+            var amt = document.createElement('b');
+            amt.textContent = '+' + a.amount + 'P';
+            row.appendChild(name); row.appendChild(amt);
+            list.appendChild(row);
+          });
+        } else {
+          box.classList.add('hidden');
+        }
+        rcSetState('done');
+      }, function () {
+        $('rc-msg').textContent = '연결이 불안정해요. 인터넷을 확인하고 다시 제출해주세요.';
+        $('rc-msg').className = 'ls-msg bad';
+        rcSetState('preview');
+      });
+    });
   }
 
   // ===== S-02 듣기 학습 =====
@@ -713,9 +926,10 @@ var App = (function () {
       $('ls-count').textContent = res.valid_count;
       $('ls-required').textContent = res.required;
       if (res.just_completed) {
-        $('ls-msg').textContent = '🎉 유효 듣기 달성! 오늘의 숙제로 돌아가요';
+        var earned = (res.awards || []).reduce(function (sum, a) { return sum + a.amount; }, 0);
+        $('ls-msg').textContent = '🎉 유효 듣기 달성!' + (earned ? ' +' + earned + 'P' : '') + ' 오늘의 숙제로 돌아가요';
         $('ls-msg').className = 'ls-msg good';
-        setTimeout(function () { loadDashboard(sess); }, 1600);
+        setTimeout(function () { loadDashboard(sess); }, 1800);
       } else if (Listen.skipped) {
         $('ls-msg').textContent = '건너뛰기가 감지돼 이번 회차는 인정되지 않았어요. 처음부터 다시!';
         $('ls-msg').className = 'ls-msg bad';
