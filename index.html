@@ -241,30 +241,13 @@
   .mirror-preview video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); display: block; }
   .mirror-badge {
     position: absolute; top: 4px; left: 4px; font-size: 9px; color: #fff;
-    background: rgba(0,0,0,.5); border-radius: 6px; padding: 1px 5px;
+    background: rgba(0,0,0,.5); border-radius: 6px; padding: 1px 5px; z-index: 1;
   }
-  .mirror-close {
-    position: absolute; top: 2px; right: 2px; width: 20px; height: 20px; border-radius: 50%;
-    border: none; background: rgba(0,0,0,.5); color: #fff; font-size: 12px; cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
+  .mirror-caption {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 1;
+    font-size: 8.5px; color: #fff; text-align: center; letter-spacing: .3px;
+    background: rgba(0,0,0,.55); padding: 2px 0;
   }
-  .mirror-overlay {
-    position: fixed; inset: 0; z-index: 60; background: rgba(27,35,64,.55);
-    display: flex; align-items: center; justify-content: center; padding: 24px;
-  }
-  .mirror-sheet {
-    background: var(--card); border-radius: var(--radius); padding: 26px 22px; max-width: 340px; text-align: center;
-    box-shadow: var(--shadow);
-  }
-  .mirror-sheet .m-emoji { font-size: 40px; }
-  .mirror-sheet .m-title { font-size: 19px; font-weight: 700; margin: 8px 0 6px; font-family: 'Jua', sans-serif; }
-  .mirror-sheet .m-desc { font-size: 13px; color: var(--muted); line-height: 1.7; margin-bottom: 18px; }
-  .mirror-sheet .m-btns { display: flex; gap: 10px; }
-  .mirror-sheet button {
-    flex: 1; border: none; border-radius: 12px; padding: 13px 0; font-size: 15px; font-weight: 700; cursor: pointer;
-  }
-  .mirror-sheet .m-ok { background: linear-gradient(120deg, var(--primary), var(--primary-2)); color: #fff; }
-  .mirror-sheet .m-skip { background: #eef0f7; color: var(--muted); }
 </style>
 </head>
 <body>
@@ -394,28 +377,11 @@
     <div class="ls-msg" id="rc-msg"></div>
   </div>
 
-  <!-- 거울 모드: 저장하지 않는 카메라 프리뷰 (5.4) -->
+  <!-- 거울 모드: 듣기·녹음 시 자동으로 켜지는, 저장하지 않는 카메라 프리뷰 (5.4) -->
   <div id="mirror-preview" class="mirror-preview hidden">
-    <span class="mirror-badge">거울</span>
-    <button class="mirror-close" onclick="Mirror.stop()" title="끄기">×</button>
+    <span class="mirror-badge">🪞 거울</span>
     <video id="mirror-video" autoplay muted playsinline></video>
-  </div>
-
-  <!-- 거울 모드 최초 안내(하루 1회) -->
-  <div id="mirror-overlay" class="mirror-overlay hidden">
-    <div class="mirror-sheet">
-      <div class="m-emoji">🪞</div>
-      <div class="m-title">거울 모드를 켤까요?</div>
-      <div class="m-desc">
-        바른 자세로 학습하도록 작은 거울 화면을 보여줘요.<br>
-        <b>영상은 저장되지 않아요.</b> 화면에만 잠깐 비춰요.<br>
-        (하루에 한 번만 물어봐요)
-      </div>
-      <div class="m-btns">
-        <button class="m-skip" onclick="Mirror.decline()">오늘은 안 할래요</button>
-        <button class="m-ok" onclick="Mirror.accept()">거울 켜기</button>
-      </div>
-    </div>
+    <span class="mirror-caption">🔒 저장 안 돼요</span>
   </div>
 </div>
 
@@ -534,39 +500,23 @@ var Server = (function () {
 })();
 
 // ===== 거울 모드 (설계결정문서 5.4) — 독립 모듈 =====
-// 저장하지 않는 카메라 프리뷰. 듣기·녹음 화면 공통. 하루 최초 1회만 물어봄.
+// 듣기·녹음 화면에 들어가면 자동으로 켜지고, 화면을 떠나면 즉시 완전히 꺼진다.
+// 동의를 묻지 않는다(학생이 스스로 켤 이유가 없으므로). 저장하지 않으며 "저장 안 됨"을 프리뷰에 상시 표시.
 // 카메라를 못 켜거나 거부해도 학습에는 지장이 없으므로 조용히 넘어간다.
 var Mirror = (function () {
   var stream = null;
-  var ASK_KEY = 'mirror_ask_date';    // 오늘 물어봤는지 (하루 1회 원칙)
-  var STATE_KEY = 'mirror_on_date';   // 오늘 켜기로 했는지
-  function today() {
-    var d = new Date();
-    return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
-  }
+  var wanted = false; // 지금 학습화면에 있어 켜져 있어야 하는가 (getUserMedia 비동기 경쟁 방지용)
   function $(id) { return document.getElementById(id); }
 
-  // 듣기/녹음 화면 진입 시 호출
-  function maybeStart() {
+  // 듣기/녹음 화면 진입 → 자동 켜기
+  function enter() {
+    wanted = true;
     if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) return;
-    if (localStorage.getItem(STATE_KEY) === today()) { start(); return; } // 오늘 이미 켜기로 함 → 재질문 없이 켬
-    if (localStorage.getItem(ASK_KEY) === today()) return;                // 오늘 이미 거절함 → 조용히 넘어감
-    $('mirror-overlay').classList.remove('hidden');
-  }
-  function accept() {
-    $('mirror-overlay').classList.add('hidden');
-    localStorage.setItem(ASK_KEY, today());
-    localStorage.setItem(STATE_KEY, today());
-    start();
-  }
-  function decline() {
-    $('mirror-overlay').classList.add('hidden');
-    localStorage.setItem(ASK_KEY, today());
-  }
-  function start() {
     if (stream) { showPreview(); return; }
     navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false })
       .then(function (s) {
+        // 스트림이 준비되기 전에 화면을 떠났으면 바로 정리 (카메라가 켜진 채 남지 않도록)
+        if (!wanted) { s.getTracks().forEach(function (t) { t.stop(); }); return; }
         stream = s;
         $('mirror-video').srcObject = s;
         showPreview();
@@ -574,14 +524,14 @@ var Mirror = (function () {
       .catch(function () { /* 카메라 거부/불가 — 무시 */ });
   }
   function showPreview() { if (stream) $('mirror-preview').classList.remove('hidden'); }
-  function hide() { $('mirror-preview').classList.add('hidden'); }   // 프리뷰만 숨김(스트림 유지, 재진입 시 즉시 표시)
-  function stop() {                                                  // 완전 종료(× 버튼·로그아웃)
+  // 학습화면 이탈·로그아웃 → 카메라 완전 종료 (프리뷰만 숨기는 게 아니라 스트림을 끈다)
+  function stop() {
+    wanted = false;
     if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
     var v = $('mirror-video'); if (v) v.srcObject = null;
-    hide();
-    localStorage.removeItem(STATE_KEY); // 오늘은 더 자동으로 켜지 않음(다시 물어보진 않음)
+    $('mirror-preview').classList.add('hidden');
   }
-  return { maybeStart: maybeStart, accept: accept, decline: decline, hide: hide, stop: stop };
+  return { enter: enter, stop: stop };
 })();
 
 var App = (function () {
@@ -598,9 +548,9 @@ var App = (function () {
     // 로그인 이후 화면에서는 상단 브랜드를 숨겨 공간 확보
     var loginScreens = ['screen-loading', 'screen-group', 'screen-name', 'screen-pin'];
     document.querySelector('.brand').classList.toggle('hidden', loginScreens.indexOf(id) === -1);
-    // 거울 모드: 듣기·녹음 화면에서만 프리뷰 노출 (스트림은 유지)
-    if (id === 'screen-listen' || id === 'screen-record') Mirror.maybeStart();
-    else Mirror.hide();
+    // 거울 모드: 듣기·녹음 화면에서 자동 켜기, 그 외 화면에서는 완전 끄기
+    if (id === 'screen-listen' || id === 'screen-record') Mirror.enter();
+    else Mirror.stop();
   }
   function saveSession(s) { localStorage.setItem(SESSION_KEY, JSON.stringify(s)); }
   function loadSession() {
