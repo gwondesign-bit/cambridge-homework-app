@@ -7,7 +7,7 @@
  * 셸 파일을 바꿀 때마다 CACHE_VERSION을 올려야 기존 설치 기기에 반영된다.
  */
 
-var CACHE_VERSION = 'shell-v6';
+var CACHE_VERSION = 'shell-v7';
 var SHELL_ASSETS = [
   './',
   './index.html',
@@ -40,6 +40,10 @@ self.addEventListener('fetch', function (e) {
   if (url.origin !== location.origin) return;
   if (e.request.method !== 'GET') return;
 
+  // 페이지 진입(HTML)은 네트워크 우선 — 배포 직후에도 항상 최신 셸을 받는다.
+  // (기존 캐시 우선 방식은 폰이 구버전 화면을 계속 쓰는 문제를 일으켰음, 2026-07-19)
+  // 오프라인일 때만 캐시로 폴백.
+  var isNavigation = e.request.mode === 'navigate' || e.request.destination === 'document';
   e.respondWith(
     caches.open(CACHE_VERSION).then(function (cache) {
       return cache.match(e.request).then(function (cached) {
@@ -47,7 +51,7 @@ self.addEventListener('fetch', function (e) {
           if (res && res.ok) cache.put(e.request, res.clone());
           return res;
         }).catch(function () { return cached; });
-        return cached || fetched;
+        return isNavigation ? fetched : (cached || fetched);
       });
     })
   );
