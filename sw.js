@@ -7,7 +7,7 @@
  * 셸 파일을 바꿀 때마다 CACHE_VERSION을 올려야 기존 설치 기기에 반영된다.
  */
 
-var CACHE_VERSION = 'shell-v4';
+var CACHE_VERSION = 'shell-v5';
 var SHELL_ASSETS = [
   './',
   './index.html',
