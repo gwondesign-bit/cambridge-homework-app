@@ -334,6 +334,9 @@
       <div class="ls-count" id="rc-due"></div>
     </div>
 
+    <!-- 읽을 본문 (있을 때만) -->
+    <div class="ls-transcript hidden" id="rc-transcript"></div>
+
     <!-- 녹음 전/중/미리듣기 -->
     <div class="rc-stage" id="rc-stage">
       <div class="rc-state-label" id="rc-state-label">녹음 버튼을 누르고 또박또박 읽어주세요</div>
@@ -376,6 +379,7 @@ var Server = (function () {
       verifySession: function (a) { return { token: a[0] }; },
       getTodayDashboard: function (a) { return { token: a[0] }; },
       getListenData: function (a) { return { token: a[0], itemId: a[1] }; },
+      getAudioForUnit: function (a) { return { token: a[0], contentUnitId: a[1] }; },
       recordListenSession: function (a) { return { token: a[0], itemId: a[1], startedAt: a[2], completed: a[3], skipped: a[4] }; },
       submitRecording: function (a) { return { token: a[0], itemId: a[1], base64: a[2], mimeType: a[3] }; }
     };
@@ -779,6 +783,16 @@ var App = (function () {
     rcSetState('idle');
     show('screen-record');
 
+    // 읽을 본문 표시 — 학생이 보면서 읽도록 (getListenData 재사용, 음원은 안 가져옴)
+    var tr = $('rc-transcript');
+    tr.classList.add('hidden');
+    Server.call('getListenData', [loadSession().token, c.item_id], function (res) {
+      if (res.ok && res.transcript && Rec.item && Rec.item.item_id === c.item_id) {
+        tr.textContent = res.transcript;
+        tr.classList.remove('hidden');
+      }
+    }, function () { /* 본문 표시는 부가 기능 — 실패해도 녹음은 진행 */ });
+
     $('rc-back').onclick = function () {
       if (Rec.state === 'recording') {
         if (!confirm('녹음 중이에요. 나가면 지금 녹음은 사라져요. 나갈까요?')) return;
@@ -918,8 +932,38 @@ var App = (function () {
     if (Listen.audio) { Listen.audio.pause(); Listen.audio.src = ''; }
     var audio = new Audio();
     audio.preload = 'metadata';
-    audio.src = d.audio_url;
     Listen.audio = audio;
+
+    // 음원 로드: mock은 audio_url(blob), 실서버는 GAS 프록시(base64→blob)
+    // 드라이브 직링크는 <audio>에서 재생이 막혀 프록시 방식 사용 (2026-07-19)
+    if (d.audio_url) {
+      audio.src = d.audio_url;
+    } else if (d.has_audio) {
+      $('ls-msg').textContent = '음원 불러오는 중...';
+      $('ls-msg').className = 'ls-msg';
+      $('ls-play').disabled = true;
+      var sess0 = loadSession();
+      Server.call('getAudioForUnit', [sess0.token, d.content_unit_id], function (res) {
+        if (!res.ok) {
+          $('ls-msg').textContent = res.message || '음원을 불러올 수 없어요. 선생님께 알려주세요.';
+          $('ls-msg').className = 'ls-msg bad';
+          return;
+        }
+        var bin = atob(res.base64);
+        var u8 = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+        audio.src = URL.createObjectURL(new Blob([u8], { type: res.mimeType || 'audio/mpeg' }));
+        $('ls-msg').textContent = '';
+        $('ls-play').disabled = false;
+      }, function () {
+        $('ls-msg').textContent = '연결이 불안정해요. 뒤로 갔다가 다시 들어와주세요.';
+        $('ls-msg').className = 'ls-msg bad';
+      });
+    } else {
+      $('ls-msg').textContent = '음원이 아직 등록되지 않았어요. 선생님께 알려주세요.';
+      $('ls-msg').className = 'ls-msg bad';
+      $('ls-play').disabled = true;
+    }
 
     // OS 미디어 컨트롤의 탐색 버튼 미등록 (설계결정문서 5.3 — MediaSession seek 핸들러 등록 안 함)
     if ('mediaSession' in navigator) {
