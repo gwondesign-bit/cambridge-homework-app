@@ -95,6 +95,35 @@
     box-shadow: 0 6px 14px rgba(91, 108, 255, .35);
   }
 
+  /* T-01 숙제 배부 */
+  .tt-head { display: flex; align-items: center; justify-content: space-between; margin: 8px 0 18px; }
+  .tt-title { font-family: 'Jua', 'Noto Sans KR', sans-serif; font-size: 22px; }
+  .tt-logout { background: none; border: 1px solid var(--line, #e2e3ee); color: var(--muted); border-radius: 999px; padding: 7px 14px; font-size: 13px; cursor: pointer; }
+  .asg-sec { background: var(--card); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); margin-bottom: 14px; }
+  .asg-sec-t { font-weight: 700; font-size: 15px; margin-bottom: 12px; }
+  .asg-seg { display: flex; gap: 8px; margin-bottom: 12px; }
+  .asg-seg-btn { flex: 1; padding: 10px; border-radius: 12px; border: 1px solid var(--line, #e2e3ee); background: #fff; color: var(--muted); font-size: 14px; cursor: pointer; }
+  .asg-seg-btn.on { background: linear-gradient(120deg, var(--primary), var(--primary-2)); color: #fff; border-color: transparent; font-weight: 700; }
+  .asg-targets { display: flex; flex-direction: column; gap: 2px; }
+  .asg-grp-head { font-size: 12px; color: var(--muted); margin: 10px 0 2px; font-weight: 700; }
+  .asg-check { display: flex; align-items: center; gap: 10px; padding: 9px 6px; cursor: pointer; font-size: 15px; }
+  .asg-check input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--primary); flex: none; }
+  .asg-input { width: 100%; padding: 11px 12px; border-radius: 12px; border: 1px solid var(--line, #e2e3ee); font-size: 15px; font-family: inherit; background: #fff; box-sizing: border-box; }
+  .asg-items { margin-top: 12px; display: flex; flex-direction: column; gap: 2px; }
+  .asg-item { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .asg-item .asg-check { flex: 1; min-width: 55%; }
+  .asg-count { width: 52px; padding: 7px; border-radius: 9px; border: 1px solid var(--line, #e2e3ee); font-size: 14px; text-align: center; }
+  .asg-count-x { font-size: 12px; color: var(--muted); }
+  .asg-row2 { display: flex; gap: 10px; }
+  .asg-field { flex: 1; display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted); }
+  .asg-summary { text-align: center; padding: 13px; border-radius: 12px; background: #f4f5ff; color: var(--muted); font-size: 14px; margin-bottom: 10px; }
+  .asg-summary.ready { color: var(--text, #2b2d42); }
+  .asg-summary b { color: var(--primary); }
+  .asg-msg { text-align: center; font-size: 13px; color: var(--muted); min-height: 18px; margin-bottom: 8px; }
+  .asg-hint { color: var(--muted); font-size: 13px; padding: 8px; }
+  .asg-btn { width: 100%; padding: 15px; border: none; border-radius: 14px; background: linear-gradient(120deg, var(--primary), var(--primary-2)); color: #fff; font-size: 17px; font-family: 'Jua', 'Noto Sans KR', sans-serif; cursor: pointer; box-shadow: 0 6px 14px rgba(91, 108, 255, .35); }
+  .asg-btn:disabled { opacity: .55; }
+
   .loading { text-align: center; color: var(--muted); padding: 56px 0; }
   .loading::before { content: '⏳'; display: block; font-size: 30px; margin-bottom: 10px; animation: spin-soft 1.6s ease-in-out infinite; }
   @keyframes spin-soft { 50% { transform: rotate(180deg); } }
@@ -295,6 +324,41 @@
     </div>
   </div>
 
+  <!-- T-01 숙제 배부 (선생님) -->
+  <div id="screen-assign" class="hidden">
+    <div class="tt-head">
+      <div class="tt-title">📋 숙제 배부</div>
+      <button class="tt-logout" onclick="App.logout()">로그아웃</button>
+    </div>
+
+    <div class="asg-sec">
+      <div class="asg-sec-t">1. 누구에게</div>
+      <div class="asg-seg">
+        <button id="tg-group" class="asg-seg-btn on" onclick="Assign.setTarget('group')">반 전체</button>
+        <button id="tg-students" class="asg-seg-btn" onclick="Assign.setTarget('students')">학생 개별</button>
+      </div>
+      <div id="asg-targets" class="asg-targets"></div>
+    </div>
+
+    <div class="asg-sec">
+      <div class="asg-sec-t">2. 무엇을</div>
+      <select id="asg-content" class="asg-input" onchange="Assign.onContent()"></select>
+      <div id="asg-items" class="asg-items"></div>
+    </div>
+
+    <div class="asg-sec">
+      <div class="asg-sec-t">3. 언제까지</div>
+      <div class="asg-row2">
+        <label class="asg-field"><span>마감일</span><input id="asg-due-date" class="asg-input" type="date"></label>
+        <label class="asg-field"><span>마감시각</span><input id="asg-due-time" class="asg-input" type="time" value="21:00"></label>
+      </div>
+    </div>
+
+    <div id="asg-summary" class="asg-summary"></div>
+    <div id="asg-msg" class="asg-msg"></div>
+    <button id="asg-submit" class="asg-btn" onclick="Assign.submit()">배부하기</button>
+  </div>
+
   <!-- S-01 오늘의 숙제 (학생 대시보드) -->
   <div id="screen-dash" class="hidden">
     <div class="dash-head">
@@ -407,7 +471,9 @@ var Server = (function () {
       getListenData: function (a) { return { token: a[0], itemId: a[1] }; },
       getAudioForUnit: function (a) { return { token: a[0], contentUnitId: a[1] }; },
       recordListenSession: function (a) { return { token: a[0], itemId: a[1], startedAt: a[2], completed: a[3], skipped: a[4] }; },
-      submitRecording: function (a) { return { token: a[0], itemId: a[1], base64: a[2], mimeType: a[3] }; }
+      submitRecording: function (a) { return { token: a[0], itemId: a[1], base64: a[2], mimeType: a[3] }; },
+      getAssignBootstrap: function (a) { return { token: a[0] }; },
+      createAssignments: function (a) { return { token: a[0], payload: a[1] }; }
     };
     return {
       call: function (fn, args, onOk, onErr) {
@@ -496,6 +562,25 @@ var Server = (function () {
         flag: this._mockAttempt >= 3 ? '해시중복의심' : '',
         awards: this._mockAttempt === 1 ? [{ label: '기본 제출', amount: 10 }, { label: 'A반 1등 제출', amount: 8 }] : [],
         sizeKB: Math.round((base64 || '').length * 3 / 4 / 1024) };
+    },
+    getAssignBootstrap: function () {
+      return { ok: true,
+        groups: [ { group_id: 'G-A', group_name: 'A반' }, { group_id: 'G-B', group_name: 'B반' } ],
+        studentsByGroup: {
+          'G-A': [ { student_id: 'S001', name: '김철수' }, { student_id: 'S002', name: '이영희' } ],
+          'G-B': [ { student_id: 'S003', name: '박민수' } ]
+        },
+        contents: [ { content_id: 'C-ART-002', subject: '기사', title: 'Boy Climbs Huge Rock', units: [
+          { content_unit_id: 'CU-ART-002-WORD', unit_type: 'word_listen', unit_label: '단어', subject: '기사', actions: [{ action: 'listen', label: '단어 듣기' }] },
+          { content_unit_id: 'CU-ART-002-BODY', unit_type: 'body_listen', unit_label: '본문', subject: '기사', actions: [{ action: 'listen', label: '본문 듣기' }, { action: 'record', label: '본문 녹음' }] },
+          { content_unit_id: 'CU-VOCA-001-A', unit_type: 'voca_recite', unit_label: 'Voca Set 1', subject: 'Voca', actions: [{ action: 'record', label: 'Voca 암송', countable: true }] }
+        ] } ] };
+    },
+    createAssignments: function (token, payload) {
+      var n = payload.targetType === 'students' ? (payload.studentIds || []).length
+        : (payload.groupIds || []).reduce(function (t, g) { return t + (g === 'G-A' ? 2 : 1); }, 0);
+      var per = (payload.items || []).reduce(function (t, it) { return t + Math.max(1, it.count || 1); }, 0);
+      return { ok: true, students: n, items: n * per, batch_id: 'B-mock' };
     }
   };
   return { call: function (fn, args, onOk) { setTimeout(function () { onOk(MOCK[fn].apply(MOCK, args || [])); }, 150); } };
@@ -536,6 +621,227 @@ var Mirror = (function () {
   return { enter: enter, stop: stop };
 })();
 
+// ===== T-01 숙제 배부 (선생님) — 독립 모듈 =====
+// 반/학생 선택 → 콘텐츠 선택 → 표준 항목 체크 → 마감 설정 → "N명에게 M건" 확인 후 생성.
+var Assign = (function () {
+  function $(id) { return document.getElementById(id); }
+  var token = null, data = null, targetType = 'group';
+
+  function open(sess) {
+    token = sess.token;
+    App.show('screen-assign');
+    $('asg-items').innerHTML = '';
+    $('asg-targets').innerHTML = '<div class="asg-hint">불러오는 중...</div>';
+    $('asg-msg').textContent = '';
+    Server.call('getAssignBootstrap', [token], function (res) {
+      if (!res.ok) {
+        if (res.needLogin) { App.logout(); return; }
+        $('asg-targets').innerHTML = '<div class="asg-hint">불러오지 못했어요. 다시 로그인해주세요.</div>';
+        return;
+      }
+      data = res;
+      // 기본 마감일 = 오늘
+      var t = new Date();
+      $('asg-due-date').value = t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0');
+      renderContentOptions();
+      setTarget('group');
+      onContent();
+    });
+  }
+
+  function renderContentOptions() {
+    var sel = $('asg-content');
+    sel.innerHTML = '';
+    if (!data.contents.length) {
+      sel.innerHTML = '<option value="">등록된 콘텐츠가 없어요</option>';
+      return;
+    }
+    data.contents.forEach(function (c) {
+      var o = document.createElement('option');
+      o.value = c.content_id;
+      o.textContent = c.subject + ' · ' + c.title;
+      sel.appendChild(o);
+    });
+  }
+
+  function setTarget(type) {
+    targetType = type;
+    $('tg-group').classList.toggle('on', type === 'group');
+    $('tg-students').classList.toggle('on', type === 'students');
+    var box = $('asg-targets');
+    box.innerHTML = '';
+    if (type === 'group') {
+      data.groups.forEach(function (g) {
+        var n = (data.studentsByGroup[g.group_id] || []).length;
+        box.appendChild(checkRow('grp', g.group_id, g.group_name + ' (' + n + '명)'));
+      });
+    } else {
+      data.groups.forEach(function (g) {
+        var studs = data.studentsByGroup[g.group_id] || [];
+        if (!studs.length) return;
+        var head = document.createElement('div');
+        head.className = 'asg-grp-head';
+        head.textContent = g.group_name;
+        box.appendChild(head);
+        studs.forEach(function (s) { box.appendChild(checkRow('stu', s.student_id, s.name)); });
+      });
+    }
+    updateSummary();
+  }
+
+  function checkRow(kind, value, label) {
+    var row = document.createElement('label');
+    row.className = 'asg-check';
+    var cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.className = 'asg-cb-' + kind; cb.value = value;
+    cb.onchange = updateSummary;
+    var sp = document.createElement('span');
+    sp.textContent = label;
+    row.appendChild(cb); row.appendChild(sp);
+    return row;
+  }
+
+  function currentContent() {
+    var id = $('asg-content').value;
+    return data.contents.filter(function (c) { return c.content_id === id; })[0] || null;
+  }
+
+  function onContent() {
+    var c = currentContent();
+    var box = $('asg-items');
+    box.innerHTML = '';
+    if (!c) { updateSummary(); return; }
+    c.units.forEach(function (u) {
+      u.actions.forEach(function (act) {
+        var row = document.createElement('div');
+        row.className = 'asg-item';
+        var lab = document.createElement('label');
+        lab.className = 'asg-check';
+        var cb = document.createElement('input');
+        cb.type = 'checkbox'; cb.className = 'asg-cb-item'; cb.checked = true;
+        cb.setAttribute('data-cu', u.content_unit_id);
+        cb.setAttribute('data-action', act.action);
+        cb.onchange = updateSummary;
+        var sp = document.createElement('span');
+        sp.textContent = u.unit_label + ' · ' + act.label;
+        lab.appendChild(cb); lab.appendChild(sp);
+        row.appendChild(lab);
+        if (act.countable) {
+          var cnt = document.createElement('input');
+          cnt.type = 'number'; cnt.min = '1'; cnt.max = '9'; cnt.value = '1';
+          cnt.className = 'asg-count'; cnt.setAttribute('data-count-for', u.content_unit_id);
+          cnt.oninput = updateSummary;
+          var x = document.createElement('span'); x.className = 'asg-count-x'; x.textContent = '× 반복';
+          row.appendChild(cnt); row.appendChild(x);
+        } else if (act.action === 'listen') {
+          var lr = document.createElement('input');
+          lr.type = 'number'; lr.min = '1'; lr.max = '9'; lr.value = '1';
+          lr.className = 'asg-count'; lr.setAttribute('data-listen-for', u.content_unit_id + '|' + act.action);
+          lr.oninput = updateSummary;
+          var lx = document.createElement('span'); lx.className = 'asg-count-x'; lx.textContent = '회 듣기';
+          row.appendChild(lr); row.appendChild(lx);
+        }
+        box.appendChild(row);
+      });
+    });
+    // 카테고리는 콘텐츠 subject를 따른다(서버 기본값과 일치)
+    updateSummary();
+  }
+
+  function collectTargets() {
+    var cls = targetType === 'group' ? '.asg-cb-grp' : '.asg-cb-stu';
+    var ids = [];
+    document.querySelectorAll(cls).forEach(function (cb) { if (cb.checked) ids.push(cb.value); });
+    return ids;
+  }
+
+  function collectItems() {
+    var items = [];
+    document.querySelectorAll('.asg-cb-item').forEach(function (cb) {
+      if (!cb.checked) return;
+      var cu = cb.getAttribute('data-cu'), action = cb.getAttribute('data-action');
+      var it = { content_unit_id: cu, action_type: action };
+      var cnt = document.querySelector('[data-count-for="' + cu + '"]');
+      if (action === 'record' && cnt) it.count = Math.max(1, parseInt(cnt.value, 10) || 1);
+      var lr = document.querySelector('[data-listen-for="' + cu + '|' + action + '"]');
+      if (action === 'listen' && lr) it.required_listens = Math.max(1, parseInt(lr.value, 10) || 1);
+      items.push(it);
+    });
+    return items;
+  }
+
+  function targetCount(ids) {
+    if (targetType === 'students') return ids.length;
+    var n = 0;
+    ids.forEach(function (gid) { n += (data.studentsByGroup[gid] || []).length; });
+    return n;
+  }
+
+  function updateSummary() {
+    if (!data) return;
+    var ids = collectTargets();
+    var items = collectItems();
+    var students = targetCount(ids);
+    var perStudent = items.reduce(function (t, it) { return t + (it.count || 1); }, 0);
+    var total = students * perStudent;
+    var el = $('asg-summary');
+    if (!students || !perStudent) {
+      el.textContent = '대상과 항목을 선택하면 배부 건수가 표시돼요.';
+      el.classList.remove('ready');
+    } else {
+      el.innerHTML = '<b>' + students + '명</b>에게 학생당 <b>' + perStudent + '건</b> · 총 <b>' + total + '건</b> 생성';
+      el.classList.add('ready');
+    }
+  }
+
+  function submit() {
+    var ids = collectTargets();
+    var items = collectItems();
+    var c = currentContent();
+    if (!c) { msg('콘텐츠를 선택해주세요.', true); return; }
+    if (!ids.length) { msg('배부 대상(반/학생)을 선택해주세요.', true); return; }
+    if (!items.length) { msg('배부할 항목을 하나 이상 선택해주세요.', true); return; }
+    var dueDate = $('asg-due-date').value;
+    if (!dueDate) { msg('마감일을 선택해주세요.', true); return; }
+    var students = targetCount(ids);
+    var per = items.reduce(function (t, it) { return t + (it.count || 1); }, 0);
+    if (!confirm(students + '명에게 총 ' + (students * per) + '건을 배부할까요?')) return;
+
+    var payload = {
+      targetType: targetType,
+      groupIds: targetType === 'group' ? ids : [],
+      studentIds: targetType === 'students' ? ids : [],
+      contentId: c.content_id,
+      items: items,
+      dueDate: dueDate,
+      dueTime: $('asg-due-time').value || '21:00',
+      category: c.subject
+    };
+    var btn = $('asg-submit');
+    btn.disabled = true; msg('배부 중...', false);
+    Server.call('createAssignments', [token, payload], function (res) {
+      btn.disabled = false;
+      if (!res.ok) {
+        if (res.needLogin) { App.logout(); return; }
+        msg(res.message || '배부하지 못했어요. 다시 해보세요.', true);
+        return;
+      }
+      msg('✅ ' + res.students + '명에게 ' + res.items + '건 배부 완료!', false);
+      // 대상 선택 초기화(같은 콘텐츠 연속 배부 실수 방지)
+      document.querySelectorAll('.asg-cb-grp, .asg-cb-stu').forEach(function (cb) { cb.checked = false; });
+      updateSummary();
+    });
+  }
+
+  function msg(text, isErr) {
+    var el = $('asg-msg');
+    el.textContent = text;
+    el.style.color = isErr ? 'var(--danger)' : 'var(--muted)';
+  }
+
+  return { open: open, setTarget: setTarget, onContent: onContent, updateSummary: updateSummary, submit: submit };
+})();
+
 var App = (function () {
   var SESSION_KEY = 'cambridge_session';
   var bootstrap = null;
@@ -544,7 +850,7 @@ var App = (function () {
 
   function $(id) { return document.getElementById(id); }
   function show(id) {
-    ['screen-loading','screen-group','screen-name','screen-pin','screen-home','screen-dash','screen-listen','screen-record'].forEach(function (s) {
+    ['screen-loading','screen-group','screen-name','screen-pin','screen-home','screen-assign','screen-dash','screen-listen','screen-record'].forEach(function (s) {
       $(s).classList.toggle('hidden', s !== id);
     });
     // 로그인 이후 화면에서는 상단 브랜드를 숨겨 공간 확보
@@ -671,9 +977,7 @@ var App = (function () {
 
   function showHome(sess) {
     if (sess.role === 'teacher') {
-      $('home-hello').textContent = '선생님, 안녕하세요!';
-      $('home-note').textContent = '선생님 현황판(T-01~03)은 WBS 4.x에서 이 화면을 교체합니다.';
-      show('screen-home');
+      Assign.open(sess);
     } else {
       loadDashboard(sess);
     }
@@ -1136,6 +1440,7 @@ var App = (function () {
 
   return {
     init: init,
+    show: show,
     showGroups: renderGroups,
     showTeacherLogin: function () { showPin('teacher'); },
     closeListen: closeListen,
@@ -1148,7 +1453,7 @@ App.init();
 // ===== 빌드 표식 =====
 // 폰이 어떤 셸 버전을 쓰는지 로그인 화면에서 눈으로 확인하기 위한 표식.
 // sw.js의 CACHE_VERSION과 함께 올린다. 폰에 이 값이 안 보이면 구버전 캐시를 쓰는 것.
-var BUILD_VERSION = 'shell-v9';
+var BUILD_VERSION = 'shell-v10';
 (function () {
   var el = document.getElementById('build-stamp');
   if (el) el.textContent = BUILD_VERSION;
