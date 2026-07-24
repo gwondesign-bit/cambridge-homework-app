@@ -55,6 +55,7 @@
   }
   .brand h1::before { content: '🎧 '; -webkit-text-fill-color: initial; }
   .brand p { color: var(--muted); font-size: 14px; margin-top: 8px; }
+  .build-stamp { font-size: 11px; opacity: 0.45; margin-top: 4px; }
 
   .step-title { font-size: 19px; margin: 26px 0 14px; }
   .back-btn { background: none; border: none; color: var(--muted); font-size: 14px; padding: 10px 0; cursor: pointer; }
@@ -255,6 +256,7 @@
   <div class="brand">
     <h1>캠브리지 영어 숙제</h1>
     <p id="brand-sub">오늘도 반가워요!</p>
+    <p id="build-stamp" class="build-stamp"></p>
   </div>
 
   <div id="screen-loading" class="loading">불러오는 중...</div>
@@ -1143,9 +1145,26 @@ var App = (function () {
 
 App.init();
 
+// ===== 빌드 표식 =====
+// 폰이 어떤 셸 버전을 쓰는지 로그인 화면에서 눈으로 확인하기 위한 표식.
+// sw.js의 CACHE_VERSION과 함께 올린다. 폰에 이 값이 안 보이면 구버전 캐시를 쓰는 것.
+var BUILD_VERSION = 'shell-v9';
+(function () {
+  var el = document.getElementById('build-stamp');
+  if (el) el.textContent = BUILD_VERSION;
+})();
+
 // ===== 서비스워커 등록 (PWA 설치·오프라인 셸) =====
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('sw.js');
+  // 새 서비스워커가 제어를 넘겨받으면 페이지를 한 번 리로드해 최신 셸을 즉시 반영한다.
+  // (이게 없으면 새 SW가 활성화돼도 이미 로드된 구버전 화면이 그대로 남는다 — iOS 설치형 PWA에서 특히 문제)
+  var swRefreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', function () {
+    if (swRefreshing) return;
+    swRefreshing = true;
+    window.location.reload();
+  });
 }
 </script>
 </body>
