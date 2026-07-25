@@ -133,6 +133,7 @@
   .asg-days { display: flex; gap: 6px; margin-top: 12px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .asg-day { flex: none; width: 40px; padding: 8px 0; text-align: center; border-radius: 10px; border: 1px solid var(--line, #e2e3ee); background: #fff; font-size: 14px; font-family: inherit; color: var(--muted); cursor: pointer; }
   .asg-day.on { background: var(--primary); color: #fff; border-color: transparent; font-weight: 700; }
+  .asg-day.none { opacity: .38; }
   .asg-day.today::after { content: '·'; display: block; line-height: 4px; font-size: 16px; }
 
   .asg-card { border: 1px solid var(--line, #e2e3ee); border-radius: 13px; padding: 12px; margin-bottom: 10px; }
@@ -760,7 +761,11 @@ var Server = (function () {
         '일': [{ subject: '예습', default_books: [], actions: ['preview_listen','preview_read','voca_record'], notes: '' }]
       };
       base.group = base.groups.filter(function (g) { return g.group_id === groupId; })[0];
-      base.curriculum = CUR[wd] || [];
+      var isPhonics = (base.group && base.group.level_band === 'Phonics');
+      var PH = { '월':[{subject:'파닉스', default_books:['SB','WB'], actions:['write'], notes:''}] };
+      ['화','수','목','금'].forEach(function(d){ PH[d] = PH['월']; });
+      base.available_days = isPhonics ? Object.keys(PH) : Object.keys(CUR);
+      base.curriculum = (isPhonics ? PH[wd] : CUR[wd]) || [];
       base.textbooks = [
         { book_id: 'RD-01-SB', subject: '리딩', book_type: 'SB', series: 'Bricks Reading', label: '30-1', seq: 1, title: '', total_pages: 60 },
         { book_id: 'RD-02-SB', subject: '리딩', book_type: 'SB', series: 'Bricks Reading', label: '40-1', seq: 2, title: '', total_pages: 60 },
@@ -1967,10 +1972,15 @@ var Assign = (function () {
     var box = $('asg-day');
     box.innerHTML = '';
     var today = boot.weekday;
+    // 반을 고른 뒤에는 그 레벨이 숙제를 갖는 요일만 진하게 — 주말에 Phonics를 골라
+    // "왜 배부가 안 되지" 하는 일을 없앤다
+    var has = (plan && plan.available_days) ? plan.available_days : null;
     ['월', '화', '수', '목', '금', '토', '일'].forEach(function (d) {
       var b = document.createElement('button');
-      b.className = 'asg-day' + (d === weekday ? ' on' : '') + (d === today ? ' today' : '');
+      var none = has && has.indexOf(d) < 0;
+      b.className = 'asg-day' + (d === weekday ? ' on' : '') + (d === today ? ' today' : '') + (none ? ' none' : '');
       b.textContent = d;
+      if (none) b.title = '이 반은 ' + d + '요일 숙제가 없어요';
       b.onclick = function () { weekday = d; renderDays(); if (groupId) loadPlan(); };
       box.appendChild(b);
     });
@@ -1995,6 +2005,7 @@ var Assign = (function () {
         return;
       }
       plan = res;
+      renderDays();   // available_days가 와야 숙제 없는 요일을 흐리게 칠할 수 있다
       buildRows();
       renderPlan();
       $('asg-due-sec').classList.remove('hidden');
@@ -2029,7 +2040,9 @@ var Assign = (function () {
             var start = pr.next_page || 1;
             vols[bt] = {
               book_type: bt,
-              book_id: pr.book_id || defaultBook(c.subject, bt),
+              // 반 설정(원생 관리)에서 정한 교재만 쓴다. 없으면 비워두고 배부를 막는다 —
+              // 목록의 첫 교재를 조용히 집어넣으면 Lv3 반에 30-1이 나가는 사고가 난다.
+              book_id: pr.book_id || '',
               page_start: start, page_end: start,
               prev_page: pr.current_page || 0
             };
@@ -2056,9 +2069,9 @@ var Assign = (function () {
     return subj + ' ' + label;
   }
 
-  function defaultBook(subject, bt) {
-    var list = (plan.textbooks || []).filter(function (t) { return t.subject === subject && t.book_type === bt; });
-    return list.length ? list[0].book_id : '';
+  /** 이 반 레벨이 숙제를 갖는 요일(서버가 커리큘럼에서 계산해 내려줌) */
+  function curriculumDays() {
+    return (plan && plan.available_days) ? plan.available_days.filter(function (d) { return d !== weekday; }) : [];
   }
 
   function bookTitle(bookId) {
@@ -2074,7 +2087,19 @@ var Assign = (function () {
     var box = $('asg-plan');
     box.innerHTML = '';
     if (!rows.length) {
-      box.innerHTML = '<div class="asg-hint">' + weekday + '요일 커리큘럼이 없어요. Curriculum 시트를 확인해주세요.</div>';
+      // 커리큘럼이 비는 건 흔한 정상 상황이다(Phonics·Lv0은 월~금만 있어 주말이 빔).
+      // "없다"만 말하지 말고 뭘 하면 되는지까지 알려준다.
+      var lv = (plan.group && plan.group.level) || '이 반';
+      var days = curriculumDays();
+      var box2 = document.createElement('div');
+      box2.className = 'asg-hint';
+      box2.innerHTML = '<b>' + weekday + '요일은 ' + lv + ' 커리큘럼이 없어요.</b><br>' +
+        (days.length
+          ? '이 반은 <b>' + days.join('·') + '요일</b>에 숙제가 있어요. 위에서 요일을 바꿔보세요.<br>' +
+            '<span style="color:var(--muted)">(요일 탭은 “무슨 숙제를 낼지”만 정해요. 마감일은 아래에서 따로 고릅니다)</span>'
+          : 'Curriculum 시트에 이 레벨의 요일이 없어요.') +
+        '<br><br>그날만 특별히 낼 게 있으면 아래 <b>＋ 자유 항목 추가</b>로 배부할 수 있어요.';
+      box.appendChild(box2);
       return;
     }
     rows.forEach(function (row, i) { box.appendChild(renderRow(row, i)); });
@@ -2311,6 +2336,17 @@ var Assign = (function () {
     var items = collectItems();
     var est = estimate(items);
     if (!items.length || !est.items) {
+      // 항목은 켜져 있는데 교재가 없어서 0건이 되는 경우가 흔하다. 진짜 이유를 말해준다.
+      var needBook = rows.filter(function (r) {
+        return r.on && r.vols && r.types.every(function (bt) { return !r.vols[bt].book_id; });
+      });
+      if (needBook.length) {
+        var subj = needBook.map(function (r) { return r.subject; }).filter(function (v, i, a) { return a.indexOf(v) === i; });
+        el.innerHTML = '<b>' + subj.join('·') + ' 교재가 지정되지 않았어요.</b><br>' +
+          '<span style="font-size:12px">원생 관리 → 과목별 교재에서 정한 뒤 다시 오세요.</span>';
+        el.classList.remove('ready'); btn.disabled = true;
+        return;
+      }
       el.textContent = '배부할 항목을 하나 이상 켜주세요.';
       el.classList.remove('ready'); btn.disabled = true;
       return;
@@ -3032,7 +3068,7 @@ App.init();
 // ===== 빌드 표식 =====
 // 폰이 어떤 셸 버전을 쓰는지 로그인 화면에서 눈으로 확인하기 위한 표식.
 // sw.js의 CACHE_VERSION과 함께 올린다. 폰에 이 값이 안 보이면 구버전 캐시를 쓰는 것.
-var BUILD_VERSION = 'shell-v16';
+var BUILD_VERSION = 'shell-v17';
 (function () {
   var el = document.getElementById('build-stamp');
   if (el) el.textContent = BUILD_VERSION;
