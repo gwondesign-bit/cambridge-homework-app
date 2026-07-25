@@ -186,6 +186,40 @@
   .mng-save-row .mng-btn { flex: none; }
   .mng-save-row .asg-btn { flex: 1; padding: 12px; font-size: 15px; }
 
+  /* --- T-02 제출 현황 --- */
+  .rv-counts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+  .rv-chip { padding: 7px 11px; border-radius: 10px; border: 1px solid var(--line, #e2e3ee); background: #fff; font-size: 13px; font-family: inherit; color: var(--muted); cursor: pointer; }
+  .rv-chip.on { border-color: transparent; color: #fff; font-weight: 700; background: var(--primary); }
+  .rv-chip b { font-weight: 700; }
+  .rv-chip.b-재제출요청.on { background: #e0574f; }
+  .rv-chip.b-플래그.on { background: #d98324; }
+  .rv-chip.b-미제출.on { background: #7a7f9a; }
+  .rv-card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 13px 14px; margin-bottom: 9px; border-left: 5px solid var(--line, #e2e3ee); }
+  .rv-card.b-재제출요청 { border-left-color: #e0574f; }
+  .rv-card.b-플래그 { border-left-color: #d98324; }
+  .rv-card.b-미제출 { border-left-color: #b9bcd0; }
+  .rv-card.b-미검사 { border-left-color: var(--primary); }
+  .rv-card.b-완료 { border-left-color: #46b98a; }
+  .rv-card.b-면제 { border-left-color: #c9cbe0; }
+  .rv-top { display: flex; align-items: center; gap: 8px; }
+  .rv-name { font-size: 15px; font-weight: 700; }
+  .rv-badge { font-size: 11px; padding: 3px 8px; border-radius: 8px; background: #f4f5ff; color: var(--primary); font-weight: 700; }
+  .rv-badge.warn { background: #fdeeda; color: #a9691a; }
+  .rv-badge.danger { background: #fdeaea; color: #c0453d; }
+  .rv-badge.ok { background: #e6f6ef; color: #2b8a63; }
+  .rv-label { font-size: 14px; color: var(--text, #2b2d42); margin-top: 5px; }
+  .rv-meta { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .rv-actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+  .rv-btn { padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line, #e2e3ee); background: #fff; color: var(--muted); font-size: 13px; font-family: inherit; cursor: pointer; }
+  .rv-btn.primary { background: var(--primary); color: #fff; border-color: transparent; font-weight: 700; }
+  .rv-btn.danger { background: #fff; color: #c0453d; border-color: #f0c4c1; }
+  .rv-btn:disabled { opacity: .5; }
+  .rv-panel { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line, #eef0f6); }
+  .rv-panel audio { width: 100%; margin: 6px 0; }
+  .rv-cmt { width: 100%; padding: 9px 10px; border-radius: 10px; border: 1px solid var(--line, #e2e3ee); font-size: 14px; font-family: inherit; box-sizing: border-box; resize: vertical; min-height: 58px; }
+  .rv-hist { font-size: 12px; color: var(--muted); margin-top: 8px; line-height: 1.7; }
+  .rv-empty { text-align: center; color: var(--muted); font-size: 14px; padding: 30px 0; }
+
   .loading { text-align: center; color: var(--muted); padding: 56px 0; }
   .loading::before { content: '⏳'; display: block; font-size: 30px; margin-bottom: 10px; animation: spin-soft 1.6s ease-in-out infinite; }
   @keyframes spin-soft { 50% { transform: rotate(180deg); } }
@@ -386,6 +420,27 @@
     </div>
   </div>
 
+  <!-- T-02 제출 현황·검사 (선생님) -->
+  <div id="screen-review" class="hidden">
+    <div class="tt-head">
+      <div class="tt-title">📥 제출 현황</div>
+      <button class="tt-logout" onclick="App.logout()">로그아웃</button>
+    </div>
+    <div class="tt-tabs">
+      <button class="tt-tab" onclick="Teacher.go('assign')">배부</button>
+      <button class="tt-tab on">제출 현황</button>
+      <button class="tt-tab" onclick="Teacher.go('manage')">원생 관리</button>
+    </div>
+
+    <div class="asg-sec">
+      <div id="rv-filters"></div>
+      <div id="rv-counts" class="rv-counts"></div>
+    </div>
+
+    <div id="rv-list"></div>
+    <div id="rv-msg" class="asg-msg"></div>
+  </div>
+
   <!-- T-04 원생·반 관리 (선생님) — 잘 안 바뀌는 설정: 반 레벨·교재·기본 회수 -->
   <div id="screen-manage" class="hidden">
     <div class="tt-head">
@@ -393,7 +448,8 @@
       <button class="tt-logout" onclick="App.logout()">로그아웃</button>
     </div>
     <div class="tt-tabs">
-      <button class="tt-tab" onclick="Teacher.go('assign')">숙제 배부</button>
+      <button class="tt-tab" onclick="Teacher.go('assign')">배부</button>
+      <button class="tt-tab" onclick="Teacher.go('review')">제출 현황</button>
       <button class="tt-tab on">원생 관리</button>
     </div>
 
@@ -413,7 +469,8 @@
       <button class="tt-logout" onclick="App.logout()">로그아웃</button>
     </div>
     <div class="tt-tabs">
-      <button class="tt-tab on">숙제 배부</button>
+      <button class="tt-tab on">배부</button>
+      <button class="tt-tab" onclick="Teacher.go('review')">제출 현황</button>
       <button class="tt-tab" onclick="Teacher.go('manage')">원생 관리</button>
     </div>
 
@@ -570,7 +627,12 @@ var Server = (function () {
     saveGroupBook: ['token', 'groupId', 'subject', 'seq'],
     saveStudentSettings: ['token', 'studentId', 'patch'],
     assignStudentsToGroup: ['token', 'groupId', 'studentIds'],
-    saveManageBatch: ['token', 'changes']
+    saveManageBatch: ['token', 'changes'],
+    getReviewBoard: ['token', 'groupId', 'dueDate'],
+    getSubmissionAudio: ['token', 'submissionId'],
+    getSubmissionHistory: ['token', 'itemId'],
+    reviewSubmission: ['token', 'submissionId', 'reviewAction', 'comment'],
+    exemptItem: ['token', 'itemId', 'comment']
   };
 
   function bodyOf(fn, args) {
@@ -809,6 +871,75 @@ var Server = (function () {
       });
       return moved ? { ok: true, moved: moved } : { ok: false, message: '옮긴 학생이 없어요.' };
     },
+    // ---- T-02 제출 현황 mock ----
+    _rv: {
+      rows: [
+        { item_id:'AI-1', submission_id:'SUB-1', student_id:'S001', student_name:'김철수', group_id:'G-A',
+          subject:'리딩', label:'리딩 교재 읽기 SB 13–16쪽', seq:'', action_mode:'read', bucket:'미검사',
+          item_status:'제출완료', due_date:'2026-07-27', due_time:'21:00', attempt_no:1, attempts:1,
+          submitted_at:'2026-07-27 19:20:11', flag:'', review_status:'대기', has_audio:true, comment:'' },
+        { item_id:'AI-2', submission_id:'SUB-2', student_id:'S002', student_name:'이영희', group_id:'G-A',
+          subject:'Voca', label:'Voca 암송', seq:'1/2', action_mode:'record', bucket:'플래그',
+          item_status:'제출완료', due_date:'2026-07-27', due_time:'21:00', attempt_no:2, attempts:2,
+          submitted_at:'2026-07-27 20:05:40', flag:'해시중복의심', review_status:'대기', has_audio:true, comment:'' },
+        { item_id:'AI-3', submission_id:'', student_id:'S003', student_name:'박민수', group_id:'G-A',
+          subject:'리딩', label:'리딩 교재 읽기 WB 5–6쪽', seq:'', action_mode:'read', bucket:'미제출',
+          item_status:'미시작', due_date:'2026-07-27', due_time:'21:00', attempt_no:0, attempts:0,
+          submitted_at:'', flag:'', review_status:'', has_audio:false, comment:'' },
+        { item_id:'AI-4', submission_id:'SUB-4', student_id:'S001', student_name:'김철수', group_id:'G-A',
+          subject:'기사', label:'기사 본문 읽기', seq:'', action_mode:'read', bucket:'재제출요청',
+          item_status:'재제출요청', due_date:'2026-07-26', due_time:'21:00', attempt_no:1, attempts:1,
+          submitted_at:'2026-07-26 18:02:00', flag:'', review_status:'반려', has_audio:true, comment:'조금 더 크게 읽어볼까요?' }
+      ]
+    },
+    getReviewBoard: function (token, groupId, dueDate) {
+      var rows = this._rv.rows.filter(function (r) {
+        return (!groupId || r.group_id === groupId) && (!dueDate || r.due_date === dueDate);
+      });
+      // 서버(Review.gs)와 같은 순서로 정렬해야 로컬에서 본 화면이 실서버와 같다
+      var ORDER = { '재제출요청':0, '플래그':1, '미제출':2, '미검사':3, '완료':4, '면제':5 };
+      var ord = function (b) { return ORDER[b] === undefined ? 9 : ORDER[b]; }; // 0이 falsy라 || 금지
+      rows = rows.slice().sort(function (x, y) {
+        var d = ord(x.bucket) - ord(y.bucket);
+        if (d !== 0) return d;
+        d = String(y.due_date).localeCompare(String(x.due_date));
+        if (d !== 0) return d;
+        return String(x.student_name).localeCompare(String(y.student_name), 'ko');
+      });
+      var counts = {};
+      rows.forEach(function (r) { counts[r.bucket] = (counts[r.bucket] || 0) + 1; });
+      return { ok: true,
+        groups: [{ group_id:'G-A', group_name:'A반' }, { group_id:'G-B', group_name:'B반' }],
+        dueDates: ['2026-07-27', '2026-07-26'], rows: rows, counts: counts };
+    },
+    getSubmissionAudio: function () {
+      // 무음 wav 한 조각 — 재생 컨트롤이 뜨는지만 확인하는 용도
+      return { ok: true, mimeType: 'audio/wav', attempt_no: 1, submitted_at: '2026-07-27 19:20:11',
+        base64: 'UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA=' };
+    },
+    getSubmissionHistory: function (token, itemId) {
+      return { ok: true, submissions: [
+        { submission_id:'SUB-2', attempt_no:2, submitted_at:'2026-07-27 20:05:40', flag:'해시중복의심', review_status:'대기', is_latest:true, comment:'' },
+        { submission_id:'SUB-2a', attempt_no:1, submitted_at:'2026-07-26 21:10:00', flag:'', review_status:'반려', is_latest:false, comment:'다시 해볼까요?' }
+      ] };
+    },
+    reviewSubmission: function (token, submissionId, action, comment) {
+      var r = this._rv.rows.filter(function (x) { return x.submission_id === submissionId; })[0];
+      if (!r) return { ok: false, message: '제출 기록을 찾을 수 없어요.' };
+      if (action === 'reject' && !String(comment || '').trim()) return { ok: false, message: '반려 사유를 적어주세요.' };
+      r.review_status = action === 'approve' ? '확인' : '반려';
+      r.item_status = action === 'approve' ? '제출완료' : '재제출요청';
+      r.bucket = action === 'approve' ? '완료' : '재제출요청';
+      if (comment) r.comment = comment;
+      return { ok: true, action: action };
+    },
+    exemptItem: function (token, itemId, comment) {
+      var r = this._rv.rows.filter(function (x) { return x.item_id === itemId; })[0];
+      if (!r) return { ok: false, message: '항목을 찾을 수 없어요.' };
+      r.item_status = '면제'; r.bucket = '면제';
+      if (comment) r.comment = '[면제] ' + comment;
+      return { ok: true, item_id: itemId };
+    },
     // 변경분 일괄 저장 — 서버와 같은 순서(반 설정 → 교재 → 이동 → 학생)로 적용
     saveManageBatch: function (token, changes) {
       var self = this;
@@ -912,9 +1043,292 @@ var Teacher = (function () {
       if (where !== 'manage' && Manage.hasUnsaved() &&
           !confirm('저장하지 않은 변경이 있어요. 버리고 나갈까요?')) return;
       if (where === 'manage') Manage.open(sess);
+      else if (where === 'review') Review.open(sess);
       else Assign.open(sess);
     }
   };
+})();
+
+/**
+ * Review — 제출 현황·검사 T-02 (WBS 4.1)
+ *
+ * "지금 처리할 것"이 위로 오게 정렬한다: 재제출요청 → 플래그 → 미제출 → 미검사 → 완료.
+ * 녹음은 드라이브 직링크가 아니라 서버 프록시(base64)로 받아 재생한다 — CLAUDE.md 음원 규칙.
+ */
+var Review = (function () {
+  function $(id) { return document.getElementById(id); }
+  var token = null, data = null, groupId = '', dueDate = '', bucket = '', openItem = null;
+  var BUCKETS = ['재제출요청', '플래그', '미제출', '미검사', '완료', '면제'];
+  var MODE_ICON = { listen: '🎧', record: '🎤', read: '📖', write: '📷' };
+
+  function open(s) {
+    token = s.token;
+    App.show('screen-review');
+    $('rv-list').innerHTML = '<div class="asg-hint">불러오는 중...</div>';
+    msg('');
+    load();
+  }
+
+  function load(keepMsg) {
+    if (!keepMsg) msg('');
+    Server.call('getReviewBoard', [token, groupId, dueDate], function (res) {
+      if (!res.ok) {
+        if (res.needLogin) { App.logout(); return; }
+        $('rv-list').innerHTML = '<div class="asg-hint">불러오지 못했어요.</div>';
+        return;
+      }
+      data = res;
+      renderFilters();
+      renderCounts();
+      renderList();
+    });
+  }
+
+  function renderFilters() {
+    var box = $('rv-filters');
+    box.innerHTML = '';
+    var row = document.createElement('div');
+    row.className = 'asg-chips';
+
+    var all = document.createElement('button');
+    all.className = 'asg-chip' + (groupId ? '' : ' on');
+    all.textContent = '전체 반';
+    all.onclick = function () { groupId = ''; dueDate = ''; load(); };
+    row.appendChild(all);
+
+    (data.groups || []).forEach(function (g) {
+      var b = document.createElement('button');
+      b.className = 'asg-chip' + (g.group_id === groupId ? ' on' : '');
+      b.textContent = g.group_name;
+      b.onclick = function () { groupId = g.group_id; dueDate = ''; load(); };
+      row.appendChild(b);
+    });
+    box.appendChild(row);
+
+    if ((data.dueDates || []).length) {
+      var sel = document.createElement('select');
+      sel.className = 'asg-input';
+      sel.style.marginTop = '10px';
+      var o0 = document.createElement('option');
+      o0.value = ''; o0.textContent = '전체 마감일';
+      sel.appendChild(o0);
+      data.dueDates.forEach(function (d) {
+        var o = document.createElement('option');
+        o.value = d; o.textContent = d + ' 마감';
+        if (d === dueDate) o.selected = true;
+        sel.appendChild(o);
+      });
+      sel.onchange = function () { dueDate = sel.value; load(); };
+      box.appendChild(sel);
+    }
+  }
+
+  function renderCounts() {
+    var box = $('rv-counts');
+    box.innerHTML = '';
+    var total = 0;
+    BUCKETS.forEach(function (b) { total += (data.counts[b] || 0); });
+
+    var all = document.createElement('button');
+    all.className = 'rv-chip' + (bucket ? '' : ' on');
+    all.innerHTML = '전체 <b>' + total + '</b>';
+    all.onclick = function () { bucket = ''; renderCounts(); renderList(); };
+    box.appendChild(all);
+
+    BUCKETS.forEach(function (b) {
+      var n = data.counts[b] || 0;
+      if (!n) return;
+      var btn = document.createElement('button');
+      btn.className = 'rv-chip b-' + b + (b === bucket ? ' on' : '');
+      btn.innerHTML = b + ' <b>' + n + '</b>';
+      btn.onclick = function () { bucket = (bucket === b ? '' : b); renderCounts(); renderList(); };
+      box.appendChild(btn);
+    });
+  }
+
+  function visibleRows() {
+    return (data.rows || []).filter(function (r) { return !bucket || r.bucket === bucket; });
+  }
+
+  function renderList() {
+    var box = $('rv-list');
+    box.innerHTML = '';
+    var rows = visibleRows();
+    if (!rows.length) {
+      box.innerHTML = '<div class="rv-empty">' +
+        (bucket ? bucket + ' 항목이 없어요.' : '표시할 제출이 없어요. 배부부터 해주세요.') + '</div>';
+      return;
+    }
+    rows.forEach(function (r) { box.appendChild(card(r)); });
+  }
+
+  function card(r) {
+    var c = document.createElement('div');
+    c.className = 'rv-card b-' + r.bucket;
+
+    var top = document.createElement('div');
+    top.className = 'rv-top';
+    var name = document.createElement('div');
+    name.className = 'rv-name';
+    name.textContent = r.student_name;
+    top.appendChild(name);
+    top.appendChild(badge(r));
+    if (r.flag) {
+      var f = document.createElement('span');
+      f.className = 'rv-badge warn'; f.textContent = '⚠ ' + r.flag;
+      top.appendChild(f);
+    }
+    c.appendChild(top);
+
+    var lab = document.createElement('div');
+    lab.className = 'rv-label';
+    lab.textContent = (MODE_ICON[r.action_mode] || '📝') + ' ' + r.label + (r.seq ? ' (' + r.seq + ')' : '');
+    c.appendChild(lab);
+
+    var meta = document.createElement('div');
+    meta.className = 'rv-meta';
+    var bits = [r.due_date + ' ' + r.due_time + ' 마감'];
+    if (r.submitted_at) bits.push(r.attempt_no + '회차 · ' + r.submitted_at.slice(5, 16));
+    if (r.attempts > 1) bits.push('총 ' + r.attempts + '회 제출');
+    meta.textContent = bits.join(' · ');
+    c.appendChild(meta);
+
+    if (r.comment) {
+      var cm = document.createElement('div');
+      cm.className = 'rv-meta';
+      cm.textContent = '💬 ' + r.comment;
+      c.appendChild(cm);
+    }
+
+    var acts = document.createElement('div');
+    acts.className = 'rv-actions';
+    if (r.has_audio) {
+      var play = document.createElement('button');
+      play.className = 'rv-btn primary';
+      play.textContent = openItem === r.item_id ? '닫기' : '▶ 듣고 검사';
+      play.onclick = function () {
+        openItem = (openItem === r.item_id) ? null : r.item_id;
+        renderList();
+      };
+      acts.appendChild(play);
+    }
+    if (r.item_status !== '면제') {
+      var ex = document.createElement('button');
+      ex.className = 'rv-btn';
+      ex.textContent = '면제';
+      ex.onclick = function () {
+        var why = prompt(r.student_name + ' — 면제 사유(선택)');
+        if (why === null) return;
+        act('exemptItem', [token, r.item_id, why], r.student_name + ' 면제 처리했어요.');
+      };
+      acts.appendChild(ex);
+    }
+    c.appendChild(acts);
+
+    if (openItem === r.item_id && r.has_audio) c.appendChild(panel(r));
+    return c;
+  }
+
+  function badge(r) {
+    var b = document.createElement('span');
+    var cls = { '재제출요청': 'danger', '플래그': 'warn', '미제출': '', '미검사': '', '완료': 'ok', '면제': 'ok' };
+    b.className = 'rv-badge ' + (cls[r.bucket] || '');
+    b.textContent = r.bucket;
+    return b;
+  }
+
+  /** 검사 패널 — 녹음 재생 + 회차 이력 + 피드백/반려 */
+  function panel(r) {
+    var p = document.createElement('div');
+    p.className = 'rv-panel';
+
+    var loading = document.createElement('div');
+    loading.className = 'rv-meta';
+    loading.textContent = '녹음 불러오는 중...';
+    p.appendChild(loading);
+
+    Server.call('getSubmissionAudio', [token, r.submission_id], function (res) {
+      loading.remove();
+      if (!res.ok) {
+        var e = document.createElement('div');
+        e.className = 'rv-meta'; e.style.color = 'var(--danger)';
+        e.textContent = res.message || '녹음을 불러오지 못했어요.';
+        p.insertBefore(e, p.firstChild);
+        return;
+      }
+      var au = document.createElement('audio');
+      au.controls = true;
+      au.src = 'data:' + (res.mimeType || 'audio/mpeg') + ';base64,' + res.base64;
+      p.insertBefore(au, p.firstChild);
+    });
+
+    // 회차 이력(2회 이상일 때만)
+    if (r.attempts > 1) {
+      var hist = document.createElement('div');
+      hist.className = 'rv-hist';
+      hist.textContent = '이전 회차 불러오는 중...';
+      p.appendChild(hist);
+      Server.call('getSubmissionHistory', [token, r.item_id], function (res) {
+        if (!res.ok) { hist.remove(); return; }
+        hist.innerHTML = '';
+        res.submissions.forEach(function (s) {
+          var line = document.createElement('div');
+          line.textContent = s.attempt_no + '회차 · ' + String(s.submitted_at).slice(5, 16) +
+            ' · ' + s.review_status + (s.comment ? ' · 💬 ' + s.comment : '') + (s.is_latest ? ' ← 최신' : '');
+          hist.appendChild(line);
+        });
+      });
+    }
+
+    var cmt = document.createElement('textarea');
+    cmt.className = 'rv-cmt';
+    cmt.placeholder = '피드백 (반려하려면 반드시 사유를 적어주세요)';
+    cmt.value = r.comment || '';
+    p.appendChild(cmt);
+
+    var row = document.createElement('div');
+    row.className = 'rv-actions';
+    var ok = document.createElement('button');
+    ok.className = 'rv-btn primary';
+    ok.textContent = '✓ 확인 완료';
+    ok.onclick = function () {
+      act('reviewSubmission', [token, r.submission_id, 'approve', cmt.value], r.student_name + ' 확인 완료.');
+    };
+    var no = document.createElement('button');
+    no.className = 'rv-btn danger';
+    no.textContent = '↩ 반려(재제출 요청)';
+    no.onclick = function () {
+      if (!String(cmt.value).trim()) { msg('반려 사유를 적어주세요. 학생에게 그대로 전달됩니다.', true); return; }
+      if (!confirm(r.student_name + '에게 재제출을 요청할까요?\n제출한 녹음은 지워지지 않고 이력으로 남습니다.')) return;
+      act('reviewSubmission', [token, r.submission_id, 'reject', cmt.value], r.student_name + '에게 재제출 요청했어요.');
+    };
+    row.appendChild(ok); row.appendChild(no);
+    p.appendChild(row);
+    return p;
+  }
+
+  function act(action, args, okMsg) {
+    msg('처리 중...');
+    Server.call(action, args, function (res) {
+      if (!res.ok) {
+        if (res.needLogin) { App.logout(); return; }
+        msg(res.message || '처리하지 못했어요.', true);
+        return;
+      }
+      openItem = null;
+      msg('✅ ' + okMsg);
+      load(true);
+    });
+  }
+
+  function msg(text, isErr) {
+    var el = $('rv-msg');
+    if (!el) return;
+    el.textContent = text || '';
+    el.style.color = isErr ? 'var(--danger)' : 'var(--muted)';
+  }
+
+  return { open: open };
 })();
 
 /**
@@ -1939,7 +2353,7 @@ var App = (function () {
 
   function $(id) { return document.getElementById(id); }
   function show(id) {
-    ['screen-loading','screen-group','screen-name','screen-pin','screen-home','screen-assign','screen-manage','screen-dash','screen-listen','screen-record'].forEach(function (s) {
+    ['screen-loading','screen-group','screen-name','screen-pin','screen-home','screen-assign','screen-manage','screen-review','screen-dash','screen-listen','screen-record'].forEach(function (s) {
       $(s).classList.toggle('hidden', s !== id);
     });
     // 로그인 이후 화면에서는 상단 브랜드를 숨겨 공간 확보
@@ -2542,7 +2956,7 @@ App.init();
 // ===== 빌드 표식 =====
 // 폰이 어떤 셸 버전을 쓰는지 로그인 화면에서 눈으로 확인하기 위한 표식.
 // sw.js의 CACHE_VERSION과 함께 올린다. 폰에 이 값이 안 보이면 구버전 캐시를 쓰는 것.
-var BUILD_VERSION = 'shell-v14';
+var BUILD_VERSION = 'shell-v15';
 (function () {
   var el = document.getElementById('build-stamp');
   if (el) el.textContent = BUILD_VERSION;
