@@ -152,10 +152,34 @@
   .asg-dial button { flex: none; width: 42px; height: 42px; border-radius: 11px; border: 1px solid var(--line, #e2e3ee); background: #fff; font-size: 15px; font-family: inherit; color: var(--muted); cursor: pointer; scroll-snap-align: center; }
   .asg-dial button.on { background: linear-gradient(120deg, var(--primary), var(--primary-2)); color: #fff; border-color: transparent; font-weight: 700; }
   .asg-dial button.between { background: #eceeff; color: var(--primary); }
+  .asg-bookname { font-size: 14px; font-weight: 700; color: var(--primary); margin-bottom: 10px; }
   .asg-auto { font-size: 12px; color: var(--muted); margin-top: 7px; }
   .asg-auto b { color: var(--primary); }
   .asg-add { width: 100%; padding: 11px; border-radius: 12px; border: 1px dashed var(--line, #c9cbe0); background: #fff; color: var(--muted); font-size: 14px; font-family: inherit; cursor: pointer; }
   .asg-del { border: none; background: none; color: var(--muted); font-size: 18px; cursor: pointer; padding: 0 4px; }
+
+  /* --- 선생님 탭 + 원생 관리(T-04) --- */
+  .tt-tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+  .tt-tab { flex: 1; padding: 10px; border-radius: 12px; border: 1px solid var(--line, #e2e3ee); background: #fff; color: var(--muted); font-size: 14px; font-family: inherit; cursor: pointer; }
+  .tt-tab.on { background: linear-gradient(120deg, var(--primary), var(--primary-2)); color: #fff; border-color: transparent; font-weight: 700; }
+  .mng-row { display: flex; align-items: center; gap: 10px; padding: 11px 0; border-bottom: 1px solid var(--line, #eef0f6); }
+  .mng-row:last-child { border-bottom: none; }
+  .mng-row-main { flex: 1; min-width: 0; }
+  .mng-row-t { font-size: 15px; }
+  .mng-row-s { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .mng-tag { font-size: 11px; padding: 3px 8px; border-radius: 8px; background: #f4f5ff; color: var(--primary); font-weight: 700; }
+  .mng-tag.warn { background: #fff3e6; color: #c47a1a; }
+  .mng-btn { padding: 7px 12px; border-radius: 10px; border: 1px solid var(--line, #e2e3ee); background: #fff; color: var(--muted); font-size: 13px; font-family: inherit; cursor: pointer; flex: none; }
+  .mng-btn.on { background: var(--primary); color: #fff; border-color: transparent; font-weight: 700; }
+  .mng-lv { display: flex; gap: 6px; flex-wrap: wrap; }
+  .mng-cnt { display: flex; align-items: center; gap: 8px; padding: 8px 0; }
+  .mng-cnt-l { flex: 1; font-size: 14px; }
+  .mng-step { display: flex; align-items: center; gap: 4px; }
+  .mng-step button { width: 32px; height: 32px; border-radius: 9px; border: 1px solid var(--line, #e2e3ee); background: #fff; font-size: 17px; font-family: inherit; color: var(--muted); cursor: pointer; }
+  .mng-step span { min-width: 26px; text-align: center; font-size: 15px; font-weight: 700; color: var(--primary); }
+  .mng-note { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+  .mng-sub { font-size: 13px; color: var(--muted); font-weight: 400; margin-left: 4px; }
+  .mng-pick { max-height: 240px; overflow-y: auto; margin: 6px 0 10px; }
 
   .loading { text-align: center; color: var(--muted); padding: 56px 0; }
   .loading::before { content: '⏳'; display: block; font-size: 30px; margin-bottom: 10px; animation: spin-soft 1.6s ease-in-out infinite; }
@@ -357,11 +381,35 @@
     </div>
   </div>
 
+  <!-- T-04 원생·반 관리 (선생님) — 잘 안 바뀌는 설정: 반 레벨·교재·기본 회수 -->
+  <div id="screen-manage" class="hidden">
+    <div class="tt-head">
+      <div class="tt-title">👥 원생 관리</div>
+      <button class="tt-logout" onclick="App.logout()">로그아웃</button>
+    </div>
+    <div class="tt-tabs">
+      <button class="tt-tab" onclick="Teacher.go('assign')">숙제 배부</button>
+      <button class="tt-tab on">원생 관리</button>
+    </div>
+
+    <div class="asg-sec">
+      <div class="asg-sec-t">어느 반</div>
+      <div id="mng-groups" class="asg-chips"></div>
+    </div>
+
+    <div id="mng-body"></div>
+    <div id="mng-msg" class="asg-msg"></div>
+  </div>
+
   <!-- T-01 숙제 배부 (선생님) -->
   <div id="screen-assign" class="hidden">
     <div class="tt-head">
       <div class="tt-title">📋 숙제 배부</div>
       <button class="tt-logout" onclick="App.logout()">로그아웃</button>
+    </div>
+    <div class="tt-tabs">
+      <button class="tt-tab on">숙제 배부</button>
+      <button class="tt-tab" onclick="Teacher.go('manage')">원생 관리</button>
     </div>
 
     <div class="asg-sec">
@@ -511,7 +559,12 @@ var Server = (function () {
     recordListenSession: ['token', 'itemId', 'startedAt', 'completed', 'skipped'],
     submitRecording: ['token', 'itemId', 'base64', 'mimeType'],
     getAssignBootstrap: ['token', 'groupId', 'weekday'],
-    createAssignments: ['token', 'payload']
+    createAssignments: ['token', 'payload'],
+    getManageData: ['token'],
+    saveGroupSettings: ['token', 'groupId', 'patch'],
+    saveGroupBook: ['token', 'groupId', 'subject', 'seq'],
+    saveStudentSettings: ['token', 'studentId', 'patch'],
+    assignStudentsToGroup: ['token', 'groupId', 'studentIds']
   };
 
   function bodyOf(fn, args) {
@@ -629,7 +682,7 @@ var Server = (function () {
         '월': [{ subject: '리딩', default_books: ['SB','WB'], actions: ['textbook_read','voca_record'], notes: '' }],
         '화': [{ subject: '그래머', default_books: ['SB','WB'], actions: ['textbook_read','grammar_word_record','pattern_read','voca_record'], notes: '' }],
         '수': [{ subject: '리스닝', default_books: ['SB','WB'], actions: ['textbook_listen','voca_record'], notes: '' }],
-        '목': [{ subject: '기사', default_books: [], actions: ['article_read','article_word','voca_record'], notes: '' }],
+        '목': [{ subject: '기사', default_books: [], actions: ['article_read','article_translate','article_pattern','article_word','voca_record'], notes: '' }],
         '금': [{ subject: '기사심화', default_books: [], actions: ['article_read_all','voca_record'], notes: '' }],
         '토': [{ subject: '예습', default_books: [], actions: ['preview_listen','preview_read','voca_record'], notes: '' }],
         '일': [{ subject: '예습', default_books: [], actions: ['preview_listen','preview_read','voca_record'], notes: '' }]
@@ -650,11 +703,105 @@ var Server = (function () {
         { student_id: 'S001', name: '김철수', voca_count: 3, read_count: 1, pattern_count: 0 },
         { student_id: 'S002', name: '이영희', voca_count: 1, read_count: 2, pattern_count: 3 }
       ];
-      base.contents = [{ content_id: 'C-ART-002', subject: '기사', title: 'Boy Climbs Huge Rock', units: [
-        { content_unit_id: 'CU-ART-002-WORD', unit_type: 'word_listen', unit_label: '단어', subject: '기사' },
-        { content_unit_id: 'CU-ART-002-BODY', unit_type: 'body_listen', unit_label: '본문', subject: '기사' }
-      ] }];
+      // 기사는 반 레벨의 것만(코드 x-x: 앞자리=레벨, 뒷자리=그 주 순번)
+      base.contents = [{ content_id: 'C-ART-002', subject: '기사', title: 'Boy Climbs Huge Rock',
+        level: 'Lv3', article_no: 1, code: '3-1', units: [
+          { content_unit_id: 'CU-ART-002-WORD', unit_type: 'word_listen', unit_label: '단어', subject: '기사' },
+          { content_unit_id: 'CU-ART-002-BODY', unit_type: 'body_listen', unit_label: '본문', subject: '기사' }
+        ] }];
+      base.contents_level_filtered = true;
       return base;
+    },
+    // ---- 원생 관리(T-04) mock. 저장은 메모리에만 반영해 화면 흐름을 확인한다 ----
+    _mng: {
+      levels: ['Phonics', 'Lv0', 'Lv1', 'Lv2', 'Lv3', 'Lv4'],
+      groups: [
+        { group_id: 'G-A', group_name: 'A반', level: 'Lv3',
+          defaults: { voca_count: 1, read_count: 1, pattern_count: 0 },
+          settings: { '리딩': { book_seq: 6, sb_page: 12, wb_page: 8 }, '그래머': { book_seq: 3, sb_page: 0, wb_page: 0 } },
+          students: [
+            { student_id: 'S001', name: '김철수', group_id: 'G-A', level: 'Lv3', voca_count: 3, read_count: 1, pattern_count: 0, overrides: { voca_count: 3 } },
+            { student_id: 'S002', name: '이영희', group_id: 'G-A', level: 'Lv3', voca_count: 1, read_count: 1, pattern_count: 0, overrides: {} }
+          ] },
+        { group_id: 'G-B', group_name: 'B반', level: 'Lv1',
+          defaults: { voca_count: 1, read_count: 1, pattern_count: 0 },
+          settings: {},
+          students: [ { student_id: 'S003', name: '박민수', group_id: 'G-B', level: 'Lv1', voca_count: 1, read_count: 1, pattern_count: 0, overrides: {} } ] }
+      ],
+      unassigned: [ { student_id: 'S004', name: '최지우', group_id: '', level: '', voca_count: 1, read_count: 1, pattern_count: 0, overrides: {} } ],
+      books: {
+        '리딩': [
+          { seq: 1, series: 'Bricks Reading', label: '30-1', sb: 'RD-01-SB', wb: 'RD-01-WB' },
+          { seq: 6, series: 'Bricks Reading', label: '80-1', sb: 'RD-06-SB', wb: 'RD-06-WB' },
+          { seq: 7, series: 'Bricks Reading', label: '100-1', sb: 'RD-07-SB', wb: 'RD-07-WB' }
+        ],
+        '그래머': [
+          { seq: 1, series: 'Grammar ELT', label: 'Starter 1', sb: 'GR-01-SB', wb: 'GR-01-WB' },
+          { seq: 3, series: 'Grammar ELT', label: 'Grammar ELT 1', sb: 'GR-03-SB', wb: 'GR-03-WB' }
+        ]
+      }
+    },
+    getManageData: function () {
+      var m = this._mng;
+      return { ok: true, levels: m.levels, groups: m.groups, books: m.books, unassigned: m.unassigned };
+    },
+    saveGroupSettings: function (token, groupId, patch) {
+      var g = this._mng.groups.filter(function (x) { return x.group_id === groupId; })[0];
+      if (!g) return { ok: false, message: '반을 찾을 수 없어요.' };
+      if (patch.level) { g.level = patch.level; g.students.forEach(function (s) { s.level = patch.level; }); }
+      if (patch.defaults) Object.keys(patch.defaults).forEach(function (f) {
+        g.defaults[f] = patch.defaults[f];
+        // 예외가 없는 학생은 기본값을 따라간다
+        g.students.forEach(function (s) { if (s.overrides[f] === undefined) s[f] = patch.defaults[f]; });
+      });
+      return { ok: true, updated: patch };
+    },
+    saveGroupBook: function (token, groupId, subject, seq) {
+      var g = this._mng.groups.filter(function (x) { return x.group_id === groupId; })[0];
+      if (!g) return { ok: false, message: '반을 찾을 수 없어요.' };
+      var prev = g.settings[subject];
+      var same = prev && prev.book_seq === seq;
+      g.settings[subject] = { book_seq: seq, sb_page: same ? prev.sb_page : 0, wb_page: same ? prev.wb_page : 0 };
+      return { ok: true, subject: subject, seq: seq };
+    },
+    saveStudentSettings: function (token, studentId, patch) {
+      var m = this._mng, found = null, grp = null;
+      m.groups.forEach(function (g) {
+        g.students.forEach(function (s) { if (s.student_id === studentId) { found = s; grp = g; } });
+      });
+      if (!found) return { ok: false, message: '학생을 찾을 수 없어요.' };
+      ['voca_count', 'read_count', 'pattern_count'].forEach(function (f) {
+        if (!Object.prototype.hasOwnProperty.call(patch, f)) return;
+        if (patch[f] === null || patch[f] === '') { delete found.overrides[f]; found[f] = grp.defaults[f]; }
+        else { found.overrides[f] = patch[f]; found[f] = patch[f]; }
+      });
+      if (patch.level) found.level = patch.level;
+      return { ok: true, student_id: studentId, counts: found, overrides: found.overrides };
+    },
+    assignStudentsToGroup: function (token, groupId, studentIds) {
+      var m = this._mng;
+      var target = m.groups.filter(function (x) { return x.group_id === groupId; })[0];
+      if (!target) return { ok: false, message: '반을 찾을 수 없어요.' };
+      var moved = 0;
+      studentIds.forEach(function (sid) {
+        var s = null;
+        m.unassigned = m.unassigned.filter(function (u) {
+          if (u.student_id === sid) { s = u; return false; }
+          return true;
+        });
+        m.groups.forEach(function (g) {
+          g.students = g.students.filter(function (x) {
+            if (x.student_id === sid && g.group_id !== groupId) { s = x; return false; }
+            return true;
+          });
+        });
+        if (!s) return;
+        s.group_id = groupId; s.level = target.level;
+        s.overrides = {};   // 반이 바뀌면 이전 반 예외는 지운다
+        ['voca_count', 'read_count', 'pattern_count'].forEach(function (f) { s[f] = target.defaults[f]; });
+        target.students.push(s); moved++;
+      });
+      return moved ? { ok: true, moved: moved } : { ok: false, message: '옮긴 학생이 없어요.' };
     },
     createAssignments: function (token, payload) {
       // 서버와 같은 규칙으로 학생별 회수를 확장해 건수를 계산(화면 요약과 대조용)
@@ -717,6 +864,405 @@ var Mirror = (function () {
 // ===== T-01 숙제 배부 (선생님) — 독립 모듈 =====
 // 반/학생 선택 → 콘텐츠 선택 → 표준 항목 체크 → 마감 설정 → "N명에게 M건" 확인 후 생성.
 /**
+ * Teacher — 선생님 화면 전환(배부 ↔ 원생 관리)
+ * 잘 안 바뀌는 설정(레벨·교재·기본 회수)은 관리 화면, 매일 하는 일은 배부 화면.
+ */
+var Teacher = (function () {
+  var sess = null;
+  return {
+    start: function (s) { sess = s; Assign.open(s); },
+    go: function (where) {
+      if (!sess) return;
+      if (where === 'manage') Manage.open(sess);
+      else Assign.open(sess);
+    }
+  };
+})();
+
+/**
+ * Manage — 원생·반 관리 T-04
+ *
+ * 여기서 정하는 것(몇 달에 한 번): 반 레벨 / 과목별 교재(SB·WB 한 쌍) / 반 기본 회수 / 반 배정.
+ * 회수는 반 기본값을 두고 학생은 예외만 저장한다 — 대부분 회수가 같은데 학생마다 입력하면
+ * 20명 × 3칸 노가다가 되기 때문(원장 피드백 2026-07-25).
+ */
+var Manage = (function () {
+  function $(id) { return document.getElementById(id); }
+  var token = null, data = null, groupId = null, picking = false;
+  // 교재 표시명 — 라벨에 이미 시리즈명이 들어간 교재가 있어(예: "Grammar ELT 1") 중복을 막는다
+  function bookName(series, label) {
+    series = String(series || '').trim(); label = String(label || '').trim();
+    if (!series) return label;
+    return label.indexOf(series) === 0 ? label : (series + ' ' + label);
+  }
+  var COUNTS = [
+    { field: 'voca_count', label: 'Voca 암송' },
+    { field: 'read_count', label: '기사 읽기' },
+    { field: 'pattern_count', label: '패턴 읽기' }
+  ];
+
+  function open(s) {
+    token = s.token;
+    App.show('screen-manage');
+    picking = false;
+    $('mng-body').innerHTML = '<div class="asg-hint">불러오는 중...</div>';
+    msg('');
+    Server.call('getManageData', [token], function (res) {
+      if (!res.ok) {
+        if (res.needLogin) { App.logout(); return; }
+        $('mng-body').innerHTML = '<div class="asg-hint">불러오지 못했어요.</div>';
+        return;
+      }
+      data = res;
+      if (!groupId || !group()) groupId = (data.groups[0] || {}).group_id || null;
+      renderGroups();
+      render();
+    });
+  }
+
+  function group() {
+    return (data.groups || []).filter(function (g) { return g.group_id === groupId; })[0] || null;
+  }
+
+  function renderGroups() {
+    var box = $('mng-groups');
+    box.innerHTML = '';
+    data.groups.forEach(function (g) {
+      var b = document.createElement('button');
+      b.className = 'asg-chip' + (g.group_id === groupId ? ' on' : '');
+      b.appendChild(document.createTextNode(g.group_name));
+      var s = document.createElement('small');
+      s.textContent = (g.level || '레벨 미정') + ' · ' + g.students.length + '명';
+      b.appendChild(s);
+      b.onclick = function () { groupId = g.group_id; picking = false; renderGroups(); render(); };
+      box.appendChild(b);
+    });
+  }
+
+  function render() {
+    var g = group();
+    var box = $('mng-body');
+    box.innerHTML = '';
+    if (!g) { box.innerHTML = '<div class="asg-hint">반이 없어요.</div>'; return; }
+    box.appendChild(levelSection(g));
+    box.appendChild(bookSection(g));
+    box.appendChild(countSection(g));
+    box.appendChild(studentSection(g));
+  }
+
+  function section(title, sub) {
+    var d = document.createElement('div');
+    d.className = 'asg-sec';
+    var t = document.createElement('div');
+    t.className = 'asg-sec-t';
+    t.textContent = title;
+    if (sub) {
+      var sp = document.createElement('span');
+      sp.className = 'mng-sub'; sp.textContent = sub;
+      t.appendChild(sp);
+    }
+    d.appendChild(t);
+    return d;
+  }
+
+  // ---- 반 레벨: 바꾸면 학생 레벨·기사 번호가 함께 따라간다 ----
+  function levelSection(g) {
+    var sec = section('반 레벨');
+    var row = document.createElement('div');
+    row.className = 'mng-lv';
+    (data.levels || []).forEach(function (lv) {
+      var b = document.createElement('button');
+      b.className = 'mng-btn' + (lv === g.level ? ' on' : '');
+      b.textContent = lv;
+      b.onclick = function () {
+        if (lv === g.level) return;
+        if (!confirm(g.group_name + '을 ' + lv + '로 바꿀까요?\n소속 학생 ' + g.students.length + '명의 레벨도 함께 바뀝니다.')) return;
+        save('saveGroupSettings', [token, groupId, { level: lv }], '레벨을 ' + lv + '로 바꿨어요.');
+      };
+      row.appendChild(b);
+    });
+    sec.appendChild(row);
+    var n = document.createElement('div');
+    n.className = 'mng-note';
+    n.textContent = '레벨을 정하면 소속 학생 레벨과 기사 번호(' + (levelNo(g.level) || 'x') + '-1, ' + (levelNo(g.level) || 'x') + '-2 …)가 따라갑니다.';
+    sec.appendChild(n);
+    return sec;
+  }
+
+  function levelNo(level) {
+    var m = String(level || '').match(/^Lv(\d+)$/i);
+    if (m) return m[1];
+    return /^Phonics$/i.test(String(level || '')) ? 'P' : '';
+  }
+
+  // ---- 과목별 교재: SB/WB는 한 쌍으로 함께 지정 ----
+  function bookSection(g) {
+    var sec = section('과목별 교재', '· 한 번 정하면 몇 달간 그대로');
+    var subjects = Object.keys(data.books || {});
+    if (!subjects.length) {
+      sec.appendChild(hint('교재 목록이 비어 있어요. Textbooks 시트를 확인해주세요.'));
+      return sec;
+    }
+    subjects.forEach(function (subj) {
+      var cur = (g.settings || {})[subj] || { book_seq: 0, sb_page: 0, wb_page: 0 };
+      var list = data.books[subj] || [];
+      var chosen = list.filter(function (b) { return b.seq === cur.book_seq; })[0];
+
+      var row = document.createElement('div');
+      row.className = 'mng-row';
+      var main = document.createElement('div');
+      main.className = 'mng-row-main';
+      var t = document.createElement('div');
+      t.className = 'mng-row-t';
+      t.textContent = chosen ? bookName(chosen.series, chosen.label) : (subj + ' 교재 미지정');
+      if (!chosen) t.style.color = 'var(--muted)';
+      var s = document.createElement('div');
+      s.className = 'mng-row-s';
+      s.textContent = chosen
+        ? (subj + ' · SB ' + cur.sb_page + '쪽 · WB ' + cur.wb_page + '쪽까지 나감')
+        : (subj + ' · 교재를 정해주세요');
+      main.appendChild(t); main.appendChild(s);
+
+      var btn = document.createElement('button');
+      btn.className = 'mng-btn';
+      btn.textContent = chosen ? '바꾸기' : '고르기';
+      btn.onclick = function () { openBookPicker(subj, list, cur.book_seq, row); };
+
+      row.appendChild(main); row.appendChild(btn);
+      sec.appendChild(row);
+    });
+    return sec;
+  }
+
+  function openBookPicker(subj, list, curSeq, afterRow) {
+    var old = document.getElementById('mng-picker');
+    if (old) old.remove();
+    var box = document.createElement('div');
+    box.id = 'mng-picker';
+    box.className = 'mng-pick';
+    list.forEach(function (b) {
+      var r = document.createElement('button');
+      r.className = 'mng-btn' + (b.seq === curSeq ? ' on' : '');
+      r.style.width = '100%';
+      r.style.textAlign = 'left';
+      r.style.marginBottom = '5px';
+      r.textContent = bookName(b.series, b.label) + (b.seq === curSeq ? ' (지금)' : '');
+      r.onclick = function () {
+        if (b.seq === curSeq) { box.remove(); return; }
+        if (!confirm(subj + ' 교재를 ' + b.label + '로 바꿀까요?\nSB·WB가 함께 바뀌고 진도는 1쪽부터 다시 시작합니다.')) return;
+        save('saveGroupBook', [token, groupId, subj, b.seq], subj + ' 교재를 ' + b.label + '로 바꿨어요.');
+      };
+      box.appendChild(r);
+    });
+    afterRow.parentNode.insertBefore(box, afterRow.nextSibling);
+  }
+
+  // ---- 반 기본 회수: 여기 값이 전원에게 적용된다 ----
+  function countSection(g) {
+    var sec = section('반 기본 회수', '· 예외인 학생만 아래에서 따로');
+    COUNTS.forEach(function (c) {
+      sec.appendChild(stepper(c.label, g.defaults[c.field], function (next) {
+        var patch = { defaults: {} };
+        patch.defaults[c.field] = next;
+        save('saveGroupSettings', [token, groupId, patch], c.label + ' 기본 ' + next + '회로 바꿨어요.');
+      }));
+    });
+    var n = document.createElement('div');
+    n.className = 'mng-note';
+    n.textContent = '0으로 두면 그 항목은 아예 배부되지 않습니다.';
+    sec.appendChild(n);
+    return sec;
+  }
+
+  function stepper(label, value, onChange) {
+    var row = document.createElement('div');
+    row.className = 'mng-cnt';
+    var l = document.createElement('div');
+    l.className = 'mng-cnt-l'; l.textContent = label;
+    var box = document.createElement('div');
+    box.className = 'mng-step';
+    var minus = document.createElement('button'); minus.textContent = '−';
+    var val = document.createElement('span'); val.textContent = value + '회';
+    var plus = document.createElement('button'); plus.textContent = '+';
+    minus.onclick = function () { if (value > 0) onChange(value - 1); };
+    plus.onclick = function () { if (value < 9) onChange(value + 1); };
+    box.appendChild(minus); box.appendChild(val); box.appendChild(plus);
+    row.appendChild(l); row.appendChild(box);
+    return row;
+  }
+
+  // ---- 학생: 예외만 눈에 띄게. 반 배정도 여기서 ----
+  function studentSection(g) {
+    var sec = section('학생 ' + g.students.length + '명');
+
+    g.students.forEach(function (st) {
+      var row = document.createElement('div');
+      row.className = 'mng-row';
+      var main = document.createElement('div');
+      main.className = 'mng-row-main';
+      var t = document.createElement('div');
+      t.className = 'mng-row-t';
+      t.textContent = st.name;
+      main.appendChild(t);
+
+      var ov = Object.keys(st.overrides || {});
+      var s = document.createElement('div');
+      s.className = 'mng-row-s';
+      s.textContent = ov.length
+        ? ov.map(function (f) { return labelOf(f) + ' ' + st.overrides[f] + '회 (기본 ' + g.defaults[f] + ')'; }).join(' · ')
+        : '반 기본값 그대로';
+      main.appendChild(s);
+      row.appendChild(main);
+
+      if (ov.length) {
+        var tag = document.createElement('span');
+        tag.className = 'mng-tag warn'; tag.textContent = '예외';
+        row.appendChild(tag);
+      }
+      var btn = document.createElement('button');
+      btn.className = 'mng-btn'; btn.textContent = '수정';
+      btn.onclick = function () { openStudent(st, g, row); };
+      row.appendChild(btn);
+      sec.appendChild(row);
+    });
+
+    var add = document.createElement('button');
+    add.className = 'asg-add';
+    add.textContent = picking ? '닫기' : '＋ 다른 반·미배정 학생 담기';
+    add.onclick = function () { picking = !picking; render(); };
+    sec.appendChild(add);
+    if (picking) sec.appendChild(studentPicker(g));
+    return sec;
+  }
+
+  function labelOf(field) {
+    var f = COUNTS.filter(function (c) { return c.field === field; })[0];
+    return f ? f.label : field;
+  }
+
+  /** 반 화면에서 여러 명 한번에 담기(신학기 편성용) */
+  function studentPicker(g) {
+    var box = document.createElement('div');
+    box.className = 'mng-pick';
+    var others = [];
+    (data.unassigned || []).forEach(function (s) { others.push({ s: s, from: '미배정' }); });
+    (data.groups || []).forEach(function (og) {
+      if (og.group_id === groupId) return;
+      og.students.forEach(function (s) { others.push({ s: s, from: og.group_name }); });
+    });
+    if (!others.length) {
+      box.appendChild(hint('담을 수 있는 학생이 없어요.'));
+      return box;
+    }
+    var picked = {};
+    others.forEach(function (o) {
+      var lab = document.createElement('label');
+      lab.className = 'asg-check';
+      var cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.onchange = function () { picked[o.s.student_id] = cb.checked; };
+      var sp = document.createElement('span');
+      sp.textContent = o.s.name + ' (' + o.from + ')';
+      lab.appendChild(cb); lab.appendChild(sp);
+      box.appendChild(lab);
+    });
+    var go = document.createElement('button');
+    go.className = 'mng-btn on';
+    go.style.width = '100%';
+    go.textContent = g.group_name + '으로 옮기기';
+    go.onclick = function () {
+      var ids = Object.keys(picked).filter(function (k) { return picked[k]; });
+      if (!ids.length) { msg('옮길 학생을 선택해주세요.', true); return; }
+      if (!confirm(ids.length + '명을 ' + g.group_name + '으로 옮길까요?\n레벨이 ' + (g.level || '반 레벨') + '로 맞춰지고, 이전 반에서 준 예외 회수는 지워집니다.')) return;
+      save('assignStudentsToGroup', [token, groupId, ids], ids.length + '명을 옮겼어요.');
+    };
+    box.appendChild(go);
+    return box;
+  }
+
+  /** 학생 개별 예외 조정 — 값이 반 기본값과 같아지면 예외를 지운다 */
+  function openStudent(st, g, afterRow) {
+    var old = document.getElementById('mng-student');
+    if (old) old.remove();
+    var box = document.createElement('div');
+    box.id = 'mng-student';
+    box.style.padding = '4px 0 10px';
+
+    COUNTS.forEach(function (c) {
+      var cur = st[c.field];
+      box.appendChild(stepper(c.label, cur, function (next) {
+        var patch = {};
+        // 반 기본값과 같아지면 예외를 지운다(빈 값 = 기본값 따름)
+        patch[c.field] = (next === g.defaults[c.field]) ? null : next;
+        save('saveStudentSettings', [token, st.student_id, patch],
+          st.name + ' ' + c.label + ' ' + next + '회' + (patch[c.field] === null ? ' (기본값)' : ''));
+      }));
+    });
+
+    if (Object.keys(st.overrides || {}).length) {
+      var reset = document.createElement('button');
+      reset.className = 'mng-btn';
+      reset.style.width = '100%';
+      reset.textContent = '전부 반 기본값으로 되돌리기';
+      reset.onclick = function () {
+        save('saveStudentSettings', [token, st.student_id,
+          { voca_count: null, read_count: null, pattern_count: null }],
+          st.name + '을 반 기본값으로 되돌렸어요.');
+      };
+      box.appendChild(reset);
+    }
+
+    var move = document.createElement('div');
+    move.className = 'mng-note';
+    move.textContent = '반 옮기기: ';
+    (data.groups || []).forEach(function (og) {
+      if (og.group_id === groupId) return;
+      var b = document.createElement('button');
+      b.className = 'mng-btn';
+      b.style.marginLeft = '6px';
+      b.textContent = og.group_name + '으로';
+      b.onclick = function () {
+        if (!confirm(st.name + '을 ' + og.group_name + '으로 옮길까요?')) return;
+        save('assignStudentsToGroup', [token, og.group_id, [st.student_id]], st.name + '을 ' + og.group_name + '으로 옮겼어요.');
+      };
+      move.appendChild(b);
+    });
+    box.appendChild(move);
+
+    afterRow.parentNode.insertBefore(box, afterRow.nextSibling);
+  }
+
+  function hint(text) {
+    var d = document.createElement('div');
+    d.className = 'asg-hint'; d.textContent = text;
+    return d;
+  }
+
+  /** 저장 후 항상 다시 읽어 화면을 서버 상태와 맞춘다 */
+  function save(action, args, okMsg) {
+    msg('저장 중...');
+    Server.call(action, args, function (res) {
+      if (!res.ok) {
+        if (res.needLogin) { App.logout(); return; }
+        msg(res.message || '저장하지 못했어요.', true);
+        return;
+      }
+      open({ token: token });
+      msg('✅ ' + okMsg);
+    });
+  }
+
+  function msg(text, isErr) {
+    var el = $('mng-msg');
+    if (!el) return;
+    el.textContent = text || '';
+    el.style.color = isErr ? 'var(--danger)' : 'var(--muted)';
+  }
+
+  return { open: open };
+})();
+
+/**
  * Assign — 숙제 배부 화면 T-01 (배부 v2, Stage 3)
  *
  * 흐름: 반 선택 → 그 반의 오늘 요일 커리큘럼 자동 표시 → SB/WB 토글 + 페이지 가로 다이얼
@@ -733,11 +1279,15 @@ var Assign = (function () {
   // 교재 페이지를 쓰는 액션 / 학생별 회수로 확장되는 액션 / 콘텐츠(음원)가 필요한 액션
   var PAGE_ACTIONS = { textbook_read: 1, textbook_listen: 1, coursebook: 1, write: 1 };
   var COUNT_FIELD = { voca_record: 'voca_count', article_read: 'read_count', pattern_read: 'pattern_count' };
-  var CONTENT_ACTIONS = { article_read: 1, article_word: 1, article_read_all: 1, preview_listen: 1, preview_read: 1 };
+  var CONTENT_ACTIONS = {
+    article_read: 1, article_translate: 1, article_pattern: 1, article_word: 1,
+    article_read_all: 1, preview_listen: 1, preview_read: 1
+  };
   var LABELS = {
     textbook_read: '교재 읽기', textbook_listen: '교재 듣기', coursebook: '코스북',
     grammar_word_record: '단어장 녹음', pattern_read: '패턴 읽기', voca_record: 'Voca 암송',
-    article_read: '기사 읽기', article_word: '기사 단어 듣기', article_read_all: '기사 전체 읽기',
+    article_read: '기사 본문 읽기', article_translate: '기사 해석 읽기', article_pattern: '기사 패턴 읽기',
+    article_word: '기사 단어 듣기', article_read_all: '기사 전체 읽기',
     preview_listen: '예습 듣기', preview_read: '예습 읽기', write: '쓰기', extra: '자유 항목'
   };
 
@@ -829,23 +1379,29 @@ var Assign = (function () {
     return t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0');
   }
 
-  /** 커리큘럼 → 화면 행 목록. 교재 행은 SB/WB로 쪼갠다(진도가 따로 나가므로) */
+  /**
+   * 커리큘럼 → 화면 행 목록.
+   * 교재 행은 SB/WB를 한 행에 묶는다(청실홍실 — 교재는 한 권, 페이지만 따로).
+   * 교재 자체는 여기서 고르지 않는다. 원생 관리에서 정한 반 교재를 그대로 쓴다.
+   */
   function buildRows() {
     rows = [];
     (plan.curriculum || []).forEach(function (c) {
       c.actions.forEach(function (action) {
         if (PAGE_ACTIONS[action]) {
           var types = (c.default_books && c.default_books.length) ? c.default_books : ['SB'];
+          var vols = {};
           types.forEach(function (bt) {
             var pr = (plan.progress || {})[c.subject + '|' + bt] || {};
             var start = pr.next_page || 1;
-            rows.push({
-              on: true, action: action, subject: c.subject, book_type: bt,
+            vols[bt] = {
+              book_type: bt,
               book_id: pr.book_id || defaultBook(c.subject, bt),
               page_start: start, page_end: start,
               prev_page: pr.current_page || 0
-            });
+            };
           });
+          rows.push({ on: true, action: action, subject: c.subject, vols: vols, types: types });
         } else {
           rows.push({
             on: true, action: action, subject: c.subject,
@@ -874,7 +1430,11 @@ var Assign = (function () {
 
   function bookTitle(bookId) {
     var b = (plan.textbooks || []).filter(function (t) { return t.book_id === bookId; })[0];
-    return b ? (b.series + ' ' + b.label) : '';
+    if (!b) return '';
+    // 라벨에 시리즈명이 이미 들어간 교재가 있어 중복 표기를 막는다("Grammar ELT Grammar ELT 1")
+    var series = String(b.series || '').trim(), label = String(b.label || '').trim();
+    if (!series) return label;
+    return label.indexOf(series) === 0 ? label : (series + ' ' + label);
   }
 
   function renderPlan() {
@@ -901,9 +1461,9 @@ var Assign = (function () {
     t.textContent = row.custom_label || rowTitle(row);
     head.appendChild(cb); head.appendChild(t);
 
-    if (row.book_type) {
+    if (row.vols) {
       var tag = document.createElement('span');
-      tag.className = 'asg-card-tag'; tag.textContent = row.book_type;
+      tag.className = 'asg-card-tag'; tag.textContent = (row.types || []).join('·');
       head.appendChild(tag);
     }
     if (row.custom) {
@@ -917,17 +1477,31 @@ var Assign = (function () {
     var body = document.createElement('div');
     body.className = 'asg-card-b';
 
-    // 1) 교재 페이지 행: 책 선택 + 시작/끝 페이지 가로 다이얼
-    if (PAGE_ACTIONS[row.action] && !row.custom) {
-      body.appendChild(bookSelect(row));
-      body.appendChild(pageDial(row, 'page_start', '시작'));
-      body.appendChild(pageDial(row, 'page_end', '끝'));
-      if (row.prev_page) {
-        var p = document.createElement('div');
-        p.className = 'asg-auto';
-        p.innerHTML = '지난 진도 <b>' + row.prev_page + '쪽</b>까지 — 이어서 시작해요.';
-        body.appendChild(p);
+    // 1) 교재 행: 교재는 글자로만(원생 관리에서 정함), SB/WB 각각 페이지 다이얼
+    if (row.vols) {
+      var anyBook = row.types.map(function (bt) { return row.vols[bt].book_id; }).filter(Boolean)[0];
+      var name = document.createElement('div');
+      name.className = 'asg-bookname';
+      name.textContent = anyBook ? bookTitle(anyBook) : (row.subject + ' 교재가 지정되지 않았어요');
+      if (!anyBook) name.style.color = 'var(--danger)';
+      body.appendChild(name);
+      if (!anyBook) {
+        var go = document.createElement('div');
+        go.className = 'asg-auto';
+        go.textContent = '원생 관리 → 과목별 교재에서 먼저 정해주세요.';
+        body.appendChild(go);
       }
+      row.types.forEach(function (bt) {
+        var v = row.vols[bt];
+        body.appendChild(pageDial(row, v, 'page_start', bt + ' 시작'));
+        body.appendChild(pageDial(row, v, 'page_end', bt + ' 끝'));
+        if (v.prev_page) {
+          var p = document.createElement('div');
+          p.className = 'asg-auto';
+          p.innerHTML = bt + ' 지난 진도 <b>' + v.prev_page + '쪽</b>까지 — 이어서 시작해요.';
+          body.appendChild(p);
+        }
+      });
     }
 
     // 2) 콘텐츠(음원)가 필요한 행: 어떤 기사/콘텐츠인지 선택
@@ -956,36 +1530,16 @@ var Assign = (function () {
     return card;
   }
 
-  function bookSelect(row) {
-    var sel = document.createElement('select');
-    sel.className = 'asg-book';
-    var list = (plan.textbooks || []).filter(function (t) {
-      return t.subject === row.subject && t.book_type === row.book_type;
-    });
-    if (!list.length) {
-      var o = document.createElement('option');
-      o.textContent = row.subject + ' ' + row.book_type + ' 교재가 없어요';
-      sel.appendChild(o); sel.disabled = true;
-      return sel;
-    }
-    list.forEach(function (b) {
-      var o = document.createElement('option');
-      o.value = b.book_id;
-      o.textContent = b.series + ' ' + b.label;
-      if (b.book_id === row.book_id) o.selected = true;
-      sel.appendChild(o);
-    });
-    if (!row.book_id) row.book_id = list[0].book_id;
-    sel.onchange = function () { row.book_id = sel.value; updateSummary(); };
-    return sel;
-  }
-
   function contentSelect(row) {
     var sel = document.createElement('select');
     sel.className = 'asg-book';
     var units = [];
     (plan.contents || []).forEach(function (c) {
-      c.units.forEach(function (u) { units.push({ id: u.content_unit_id, label: c.title + ' · ' + u.unit_label }); });
+      // 기사 번호 x-x를 앞에 붙인다(앞자리=레벨, 뒷자리=그 주 순번)
+      var prefix = c.code ? (c.code + ' ') : '';
+      c.units.forEach(function (u) {
+        units.push({ id: u.content_unit_id, label: prefix + c.title + ' · ' + u.unit_label });
+      });
     });
     if (!units.length) {
       var o = document.createElement('option');
@@ -1007,22 +1561,22 @@ var Assign = (function () {
   }
 
   /** 페이지 가로 다이얼 — 진도 이어받기(시작값=next_page). 페이지=가로, 검증된 프로토타입 방식 */
-  function pageDial(row, field, label) {
+  function pageDial(row, vol, field, label) {
     var wrap = document.createElement('div');
     var head = document.createElement('div');
     head.className = 'asg-dial-l';
     var name = document.createElement('span'); name.textContent = label + '쪽';
-    var val = document.createElement('b'); val.textContent = row[field] + '쪽';
+    var val = document.createElement('b'); val.textContent = vol[field] + '쪽';
     head.appendChild(name); head.appendChild(val);
     wrap.appendChild(head);
 
     var strip = document.createElement('div');
     strip.className = 'asg-dial';
-    var book = (plan.textbooks || []).filter(function (t) { return t.book_id === row.book_id; })[0];
+    var book = (plan.textbooks || []).filter(function (t) { return t.book_id === vol.book_id; })[0];
     var max = (book && book.total_pages) ? book.total_pages : 80;
-    var from = Math.max(1, (row.prev_page || 0) - 2);
+    var from = Math.max(1, (vol.prev_page || 0) - 2);
     for (var p = from; p <= max; p++) {
-      strip.appendChild(dialBtn(row, field, p, strip, val));
+      strip.appendChild(dialBtn(vol, field, p, strip, val));
     }
     wrap.appendChild(strip);
     // 선택값이 보이도록 스크롤
@@ -1033,16 +1587,16 @@ var Assign = (function () {
     return wrap;
   }
 
-  function dialBtn(row, field, p, strip, valEl) {
+  function dialBtn(vol, field, p, strip, valEl) {
     var b = document.createElement('button');
     b.textContent = p;
-    b.className = p === row[field] ? 'on'
-      : (p > row.page_start && p < row.page_end ? 'between' : '');
+    b.className = p === vol[field] ? 'on'
+      : (p > vol.page_start && p < vol.page_end ? 'between' : '');
     b.onclick = function () {
-      row[field] = p;
+      vol[field] = p;
       // 끝쪽이 시작쪽보다 앞이면 같이 밀어준다(잘못된 범위 방지)
-      if (field === 'page_start' && row.page_end < p) row.page_end = p;
-      if (field === 'page_end' && p < row.page_start) row.page_start = p;
+      if (field === 'page_start' && vol.page_end < p) vol.page_end = p;
+      if (field === 'page_end' && p < vol.page_start) vol.page_start = p;
       valEl.textContent = p + '쪽';
       renderPlan(); updateSummary();
     };
@@ -1072,11 +1626,24 @@ var Assign = (function () {
     rows.forEach(function (row) {
       if (!row.on) return;
       if (row.custom && !String(row.custom_label || '').trim()) return; // 라벨 없는 자유 항목은 제외
-      var it = { action: row.action, subject: row.subject || (plan.curriculum[0] || {}).subject || '' };
-      if (PAGE_ACTIONS[row.action] && !row.custom) {
-        it.book_type = row.book_type; it.book_id = row.book_id;
-        it.page_start = row.page_start; it.page_end = row.page_end;
+      var subject = row.subject || (plan.curriculum[0] || {}).subject || '';
+
+      // 교재 행은 SB/WB가 한 카드에 묶여 있지만, 서버로는 권마다 한 항목씩 보낸다
+      // (진도가 SB·WB 따로 나가므로 Progress도 각각 갱신돼야 한다)
+      if (row.vols) {
+        row.types.forEach(function (bt) {
+          var v = row.vols[bt];
+          if (!v.book_id) return; // 교재 미지정이면 보내지 않음
+          items.push({
+            action: row.action, subject: subject,
+            book_type: bt, book_id: v.book_id,
+            page_start: v.page_start, page_end: v.page_end
+          });
+        });
+        return;
       }
+
+      var it = { action: row.action, subject: subject };
       if (row.count_field) it.count_field = row.count_field;
       if (row.content_unit_id) it.content_unit_id = row.content_unit_id;
       if (row.required_listens) it.required_listens = row.required_listens;
@@ -1179,7 +1746,7 @@ var App = (function () {
 
   function $(id) { return document.getElementById(id); }
   function show(id) {
-    ['screen-loading','screen-group','screen-name','screen-pin','screen-home','screen-assign','screen-dash','screen-listen','screen-record'].forEach(function (s) {
+    ['screen-loading','screen-group','screen-name','screen-pin','screen-home','screen-assign','screen-manage','screen-dash','screen-listen','screen-record'].forEach(function (s) {
       $(s).classList.toggle('hidden', s !== id);
     });
     // 로그인 이후 화면에서는 상단 브랜드를 숨겨 공간 확보
@@ -1306,7 +1873,7 @@ var App = (function () {
 
   function showHome(sess) {
     if (sess.role === 'teacher') {
-      Assign.open(sess);
+      Teacher.start(sess);   // 배부로 시작, 탭으로 원생 관리 이동
     } else {
       loadDashboard(sess);
     }
@@ -1782,7 +2349,7 @@ App.init();
 // ===== 빌드 표식 =====
 // 폰이 어떤 셸 버전을 쓰는지 로그인 화면에서 눈으로 확인하기 위한 표식.
 // sw.js의 CACHE_VERSION과 함께 올린다. 폰에 이 값이 안 보이면 구버전 캐시를 쓰는 것.
-var BUILD_VERSION = 'shell-v12';
+var BUILD_VERSION = 'shell-v13';
 (function () {
   var el = document.getElementById('build-stamp');
   if (el) el.textContent = BUILD_VERSION;
