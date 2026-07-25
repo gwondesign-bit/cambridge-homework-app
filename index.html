@@ -180,6 +180,11 @@
   .mng-note { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
   .mng-sub { font-size: 13px; color: var(--muted); font-weight: 400; margin-left: 4px; }
   .mng-pick { max-height: 240px; overflow-y: auto; margin: 6px 0 10px; }
+  .mng-save { position: sticky; bottom: 8px; background: #fff; border: 2px solid var(--primary); border-radius: var(--radius); padding: 13px; box-shadow: 0 6px 18px rgba(27,35,64,.16); margin-top: 4px; }
+  .mng-save-list { font-size: 12px; color: var(--muted); line-height: 1.7; margin-bottom: 10px; max-height: 130px; overflow-y: auto; }
+  .mng-save-row { display: flex; gap: 8px; align-items: stretch; }
+  .mng-save-row .mng-btn { flex: none; }
+  .mng-save-row .asg-btn { flex: 1; padding: 12px; font-size: 15px; }
 
   .loading { text-align: center; color: var(--muted); padding: 56px 0; }
   .loading::before { content: '⏳'; display: block; font-size: 30px; margin-bottom: 10px; animation: spin-soft 1.6s ease-in-out infinite; }
@@ -564,7 +569,8 @@ var Server = (function () {
     saveGroupSettings: ['token', 'groupId', 'patch'],
     saveGroupBook: ['token', 'groupId', 'subject', 'seq'],
     saveStudentSettings: ['token', 'studentId', 'patch'],
-    assignStudentsToGroup: ['token', 'groupId', 'studentIds']
+    assignStudentsToGroup: ['token', 'groupId', 'studentIds'],
+    saveManageBatch: ['token', 'changes']
   };
 
   function bodyOf(fn, args) {
@@ -803,6 +809,35 @@ var Server = (function () {
       });
       return moved ? { ok: true, moved: moved } : { ok: false, message: '옮긴 학생이 없어요.' };
     },
+    // 변경분 일괄 저장 — 서버와 같은 순서(반 설정 → 교재 → 이동 → 학생)로 적용
+    saveManageBatch: function (token, changes) {
+      var self = this;
+      var failed = [];
+      if (changes.level || changes.defaults) {
+        var r = self.saveGroupSettings(token, changes.groupId, {
+          level: changes.level, defaults: changes.defaults || {}
+        });
+        if (!r.ok) failed.push('반 설정');
+      }
+      Object.keys(changes.books || {}).forEach(function (subj) {
+        var b = self.saveGroupBook(token, changes.groupId, subj, changes.books[subj]);
+        if (!b.ok) failed.push(subj + ' 교재');
+      });
+      var byTarget = {};
+      Object.keys(changes.moves || {}).forEach(function (sid) {
+        var to = changes.moves[sid];
+        (byTarget[to] = byTarget[to] || []).push(sid);
+      });
+      Object.keys(byTarget).forEach(function (to) {
+        var m = self.assignStudentsToGroup(token, to, byTarget[to]);
+        if (!m.ok) failed.push('반 이동');
+      });
+      Object.keys(changes.students || {}).forEach(function (sid) {
+        var s = self.saveStudentSettings(token, sid, changes.students[sid]);
+        if (!s.ok) failed.push(sid);
+      });
+      return { ok: failed.length === 0, applied: changes, failed: failed };
+    },
     createAssignments: function (token, payload) {
       // 서버와 같은 규칙으로 학생별 회수를 확장해 건수를 계산(화면 요약과 대조용)
       var studs = [ { voca_count: 3, read_count: 1, pattern_count: 0 }, { voca_count: 1, read_count: 2, pattern_count: 3 } ];
@@ -873,6 +908,9 @@ var Teacher = (function () {
     start: function (s) { sess = s; Assign.open(s); },
     go: function (where) {
       if (!sess) return;
+      // 관리 화면에 저장 안 한 변경분이 있으면 나가기 전에 물어본다
+      if (where !== 'manage' && Manage.hasUnsaved() &&
+          !confirm('저장하지 않은 변경이 있어요. 버리고 나갈까요?')) return;
       if (where === 'manage') Manage.open(sess);
       else Assign.open(sess);
     }
@@ -889,6 +927,55 @@ var Teacher = (function () {
 var Manage = (function () {
   function $(id) { return document.getElementById(id); }
   var token = null, data = null, groupId = null, picking = false;
+
+  /**
+   * 변경분(draft) — 값을 바꿔도 바로 저장하지 않고 여기 모아뒀다가 확인 버튼에서 한 번에 보낸다.
+   * GAS 왕복이 1~3초라 스테퍼를 세 번 누르면 저장이 세 번 나가던 문제를 없앤 것.
+   * { level, defaults:{}, books:{과목:seq}, students:{학생:{필드:값|null}}, moves:{학생:반} }
+   */
+  var draft = null;
+  function resetDraft() { draft = { level: null, defaults: {}, books: {}, students: {}, moves: {} }; }
+  function dirtyCount() {
+    if (!draft) return 0;
+    return (draft.level ? 1 : 0) + Object.keys(draft.defaults).length + Object.keys(draft.books).length +
+      Object.keys(draft.students).length + Object.keys(draft.moves).length;
+  }
+
+  // ---- 화면에 보여줄 "지금 값" = 원본에 draft를 얹은 것 ----
+  function effLevel(g) { return draft.level || g.level; }
+  function effDefault(g, f) {
+    return draft.defaults[f] !== undefined ? draft.defaults[f] : g.defaults[f];
+  }
+  function effBookSeq(g, subj) {
+    if (draft.books[subj] !== undefined) return draft.books[subj];
+    return ((g.settings || {})[subj] || {}).book_seq || 0;
+  }
+  /** 학생 회수: draft → 학생 예외 → 반 기본값 (서버 resolveCounts_와 같은 순서) */
+  function effCount(g, st, f) {
+    var d = draft.students[st.student_id];
+    if (d && d[f] !== undefined) {
+      return d[f] === null ? effDefault(g, f) : d[f];
+    }
+    if (st.overrides && st.overrides[f] !== undefined) return st.overrides[f];
+    return effDefault(g, f);
+  }
+  /** 이 학생이 지금 예외 상태인가(저장 전 변경분 포함) */
+  function effOverrides(g, st) {
+    var out = {};
+    COUNTS.forEach(function (c) {
+      var f = c.field;
+      var d = draft.students[st.student_id];
+      if (d && d[f] !== undefined) { if (d[f] !== null) out[f] = d[f]; return; }
+      if (st.overrides && st.overrides[f] !== undefined) out[f] = st.overrides[f];
+    });
+    return out;
+  }
+  /** 값이 반 기본값과 같아지면 예외를 없앤다(null = 기본값 따름) */
+  function setStudentCount(g, st, field, next) {
+    if (!draft.students[st.student_id]) draft.students[st.student_id] = {};
+    draft.students[st.student_id][field] = (next === effDefault(g, field)) ? null : next;
+    render();
+  }
   // 교재 표시명 — 라벨에 이미 시리즈명이 들어간 교재가 있어(예: "Grammar ELT 1") 중복을 막는다
   function bookName(series, label) {
     series = String(series || '').trim(); label = String(label || '').trim();
@@ -905,6 +992,7 @@ var Manage = (function () {
     token = s.token;
     App.show('screen-manage');
     picking = false;
+    resetDraft();
     $('mng-body').innerHTML = '<div class="asg-hint">불러오는 중...</div>';
     msg('');
     Server.call('getManageData', [token], function (res) {
@@ -934,7 +1022,13 @@ var Manage = (function () {
       var s = document.createElement('small');
       s.textContent = (g.level || '레벨 미정') + ' · ' + g.students.length + '명';
       b.appendChild(s);
-      b.onclick = function () { groupId = g.group_id; picking = false; renderGroups(); render(); };
+      b.onclick = function () {
+        if (g.group_id === groupId) return;
+        // 저장 안 한 변경분이 있으면 반을 옮기기 전에 물어본다(조용히 날아가지 않게)
+        if (dirtyCount() && !confirm('저장하지 않은 변경 ' + dirtyCount() + '건이 있어요.\n버리고 다른 반으로 갈까요?')) return;
+        groupId = g.group_id; picking = false; resetDraft();
+        renderGroups(); render(); msg('');
+      };
       box.appendChild(b);
     });
   }
@@ -948,6 +1042,100 @@ var Manage = (function () {
     box.appendChild(bookSection(g));
     box.appendChild(countSection(g));
     box.appendChild(studentSection(g));
+    box.appendChild(saveBar(g));
+  }
+
+  /** 변경분이 있을 때만 뜨는 저장 바 — 무엇이 바뀌는지 먼저 보여주고 한 번에 올린다 */
+  function saveBar(g) {
+    var wrap = document.createElement('div');
+    var n = dirtyCount();
+    if (!n) return wrap;
+
+    var box = document.createElement('div');
+    box.className = 'mng-save';
+    var list = document.createElement('div');
+    list.className = 'mng-save-list';
+    changeSummary(g).forEach(function (line) {
+      var d = document.createElement('div');
+      d.textContent = '· ' + line;
+      list.appendChild(d);
+    });
+    box.appendChild(list);
+
+    var row = document.createElement('div');
+    row.className = 'mng-save-row';
+    var cancel = document.createElement('button');
+    cancel.className = 'mng-btn';
+    cancel.textContent = '되돌리기';
+    cancel.onclick = function () {
+      if (!confirm('바꾼 내용 ' + n + '건을 버릴까요?')) return;
+      resetDraft(); render(); msg('');
+    };
+    var save = document.createElement('button');
+    save.className = 'asg-btn';
+    save.style.marginTop = '0';
+    save.textContent = '변경 ' + n + '건 저장';
+    save.onclick = function () { commit(g); };
+    row.appendChild(cancel); row.appendChild(save);
+    box.appendChild(row);
+    wrap.appendChild(box);
+    return wrap;
+  }
+
+  /** 저장 전에 보여줄 변경 요약 — 눌러놓고 뭐 바꿨는지 잊는 걸 막는다 */
+  function changeSummary(g) {
+    var out = [];
+    if (draft.level) out.push('반 레벨 → ' + draft.level + ' (학생 레벨도 함께 바뀜)');
+    Object.keys(draft.defaults).forEach(function (f) {
+      out.push('기본 ' + labelOf(f) + ' → ' + draft.defaults[f] + '회');
+    });
+    Object.keys(draft.books).forEach(function (subj) {
+      var b = (data.books[subj] || []).filter(function (x) { return x.seq === draft.books[subj]; })[0];
+      out.push(subj + ' 교재 → ' + (b ? bookName(b.series, b.label) : '?') + ' (진도 1쪽부터 다시)');
+    });
+    Object.keys(draft.students).forEach(function (sid) {
+      var st = (g.students || []).filter(function (x) { return x.student_id === sid; })[0];
+      var name = st ? st.name : sid;
+      Object.keys(draft.students[sid]).forEach(function (f) {
+        var v = draft.students[sid][f];
+        out.push(name + ' ' + labelOf(f) + ' → ' + (v === null ? '반 기본값' : v + '회'));
+      });
+    });
+    Object.keys(draft.moves).forEach(function (sid) {
+      var to = (data.groups || []).filter(function (x) { return x.group_id === draft.moves[sid]; })[0];
+      var st = findStudent(sid);
+      out.push((st ? st.name : sid) + ' → ' + (to ? to.group_name : draft.moves[sid]) + '으로 이동');
+    });
+    return out;
+  }
+
+  function findStudent(sid) {
+    var found = null;
+    (data.groups || []).forEach(function (g) {
+      (g.students || []).forEach(function (s) { if (s.student_id === sid) found = s; });
+    });
+    (data.unassigned || []).forEach(function (s) { if (s.student_id === sid) found = s; });
+    return found;
+  }
+
+  /** 모아둔 변경분을 한 번에 서버로 */
+  function commit(g) {
+    var changes = { groupId: groupId };
+    if (draft.level) changes.level = draft.level;
+    if (Object.keys(draft.defaults).length) changes.defaults = draft.defaults;
+    if (Object.keys(draft.books).length) changes.books = draft.books;
+    if (Object.keys(draft.students).length) changes.students = draft.students;
+    if (Object.keys(draft.moves).length) changes.moves = draft.moves;
+
+    msg('저장 중...');
+    Server.call('saveManageBatch', [token, changes], function (res) {
+      if (res.needLogin) { App.logout(); return; }
+      if (!res.ok && res.message) { msg(res.message, true); return; }
+      var failed = res.failed || [];
+      open({ token: token });   // 서버 상태로 다시 그린다(draft도 비워짐)
+      if (failed.length) msg('일부 저장 실패: ' + failed.join(' / '), true);
+      else msg('✅ 저장했어요.');
+    });
   }
 
   function section(title, sub) {
@@ -970,21 +1158,22 @@ var Manage = (function () {
     var sec = section('반 레벨');
     var row = document.createElement('div');
     row.className = 'mng-lv';
+    var cur = effLevel(g);
     (data.levels || []).forEach(function (lv) {
       var b = document.createElement('button');
-      b.className = 'mng-btn' + (lv === g.level ? ' on' : '');
+      b.className = 'mng-btn' + (lv === cur ? ' on' : '');
       b.textContent = lv;
       b.onclick = function () {
-        if (lv === g.level) return;
-        if (!confirm(g.group_name + '을 ' + lv + '로 바꿀까요?\n소속 학생 ' + g.students.length + '명의 레벨도 함께 바뀝니다.')) return;
-        save('saveGroupSettings', [token, groupId, { level: lv }], '레벨을 ' + lv + '로 바꿨어요.');
+        if (lv === cur) return;
+        draft.level = (lv === g.level) ? null : lv;  // 원래 값으로 되돌리면 변경분에서 뺀다
+        render();
       };
       row.appendChild(b);
     });
     sec.appendChild(row);
     var n = document.createElement('div');
     n.className = 'mng-note';
-    n.textContent = '레벨을 정하면 소속 학생 레벨과 기사 번호(' + (levelNo(g.level) || 'x') + '-1, ' + (levelNo(g.level) || 'x') + '-2 …)가 따라갑니다.';
+    n.textContent = '레벨을 정하면 소속 학생 레벨과 기사 번호(' + (levelNo(cur) || 'x') + '-1, ' + (levelNo(cur) || 'x') + '-2 …)가 따라갑니다.';
     sec.appendChild(n);
     return sec;
   }
@@ -1004,9 +1193,11 @@ var Manage = (function () {
       return sec;
     }
     subjects.forEach(function (subj) {
-      var cur = (g.settings || {})[subj] || { book_seq: 0, sb_page: 0, wb_page: 0 };
+      var saved = (g.settings || {})[subj] || { book_seq: 0, sb_page: 0, wb_page: 0 };
+      var seq = effBookSeq(g, subj);
+      var changed = draft.books[subj] !== undefined;
       var list = data.books[subj] || [];
-      var chosen = list.filter(function (b) { return b.seq === cur.book_seq; })[0];
+      var chosen = list.filter(function (b) { return b.seq === seq; })[0];
 
       var row = document.createElement('div');
       row.className = 'mng-row';
@@ -1018,39 +1209,46 @@ var Manage = (function () {
       if (!chosen) t.style.color = 'var(--muted)';
       var s = document.createElement('div');
       s.className = 'mng-row-s';
-      s.textContent = chosen
-        ? (subj + ' · SB ' + cur.sb_page + '쪽 · WB ' + cur.wb_page + '쪽까지 나감')
-        : (subj + ' · 교재를 정해주세요');
+      s.textContent = !chosen ? (subj + ' · 교재를 정해주세요')
+        : changed ? (subj + ' · 저장하면 진도 1쪽부터 다시 시작')
+        : (subj + ' · SB ' + saved.sb_page + '쪽 · WB ' + saved.wb_page + '쪽까지 나감');
       main.appendChild(t); main.appendChild(s);
+      row.appendChild(main);
 
+      if (changed) {
+        var tag = document.createElement('span');
+        tag.className = 'mng-tag warn'; tag.textContent = '변경';
+        row.appendChild(tag);
+      }
       var btn = document.createElement('button');
       btn.className = 'mng-btn';
       btn.textContent = chosen ? '바꾸기' : '고르기';
-      btn.onclick = function () { openBookPicker(subj, list, cur.book_seq, row); };
-
-      row.appendChild(main); row.appendChild(btn);
+      btn.onclick = function () { openBookPicker(g, subj, list, seq, row); };
+      row.appendChild(btn);
       sec.appendChild(row);
     });
     return sec;
   }
 
-  function openBookPicker(subj, list, curSeq, afterRow) {
+  function openBookPicker(g, subj, list, curSeq, afterRow) {
     var old = document.getElementById('mng-picker');
     if (old) old.remove();
     var box = document.createElement('div');
     box.id = 'mng-picker';
     box.className = 'mng-pick';
+    var savedSeq = ((g.settings || {})[subj] || {}).book_seq || 0;
     list.forEach(function (b) {
       var r = document.createElement('button');
       r.className = 'mng-btn' + (b.seq === curSeq ? ' on' : '');
       r.style.width = '100%';
       r.style.textAlign = 'left';
       r.style.marginBottom = '5px';
-      r.textContent = bookName(b.series, b.label) + (b.seq === curSeq ? ' (지금)' : '');
+      r.textContent = bookName(b.series, b.label) + (b.seq === savedSeq ? ' (지금)' : '');
       r.onclick = function () {
-        if (b.seq === curSeq) { box.remove(); return; }
-        if (!confirm(subj + ' 교재를 ' + b.label + '로 바꿀까요?\nSB·WB가 함께 바뀌고 진도는 1쪽부터 다시 시작합니다.')) return;
-        save('saveGroupBook', [token, groupId, subj, b.seq], subj + ' 교재를 ' + b.label + '로 바꿨어요.');
+        // 원래 교재로 되돌리면 변경분에서 뺀다
+        if (b.seq === savedSeq) delete draft.books[subj];
+        else draft.books[subj] = b.seq;
+        render();
       };
       box.appendChild(r);
     });
@@ -1061,11 +1259,12 @@ var Manage = (function () {
   function countSection(g) {
     var sec = section('반 기본 회수', '· 예외인 학생만 아래에서 따로');
     COUNTS.forEach(function (c) {
-      sec.appendChild(stepper(c.label, g.defaults[c.field], function (next) {
-        var patch = { defaults: {} };
-        patch.defaults[c.field] = next;
-        save('saveGroupSettings', [token, groupId, patch], c.label + ' 기본 ' + next + '회로 바꿨어요.');
-      }));
+      sec.appendChild(stepper(c.label, effDefault(g, c.field), function (next) {
+        // 원래 값으로 되돌리면 변경분에서 뺀다
+        if (next === g.defaults[c.field]) delete draft.defaults[c.field];
+        else draft.defaults[c.field] = next;
+        render();
+      }, draft.defaults[c.field] !== undefined));
     });
     var n = document.createElement('div');
     n.className = 'mng-note';
@@ -1074,11 +1273,17 @@ var Manage = (function () {
     return sec;
   }
 
-  function stepper(label, value, onChange) {
+  function stepper(label, value, onChange, changed) {
     var row = document.createElement('div');
     row.className = 'mng-cnt';
     var l = document.createElement('div');
     l.className = 'mng-cnt-l'; l.textContent = label;
+    if (changed) {
+      var tag = document.createElement('span');
+      tag.className = 'mng-tag warn'; tag.textContent = '변경';
+      tag.style.marginLeft = '6px';
+      l.appendChild(tag);
+    }
     var box = document.createElement('div');
     box.className = 'mng-step';
     var minus = document.createElement('button'); minus.textContent = '−';
@@ -1105,11 +1310,12 @@ var Manage = (function () {
       t.textContent = st.name;
       main.appendChild(t);
 
-      var ov = Object.keys(st.overrides || {});
+      var eff = effOverrides(g, st);
+      var ov = Object.keys(eff);
       var s = document.createElement('div');
       s.className = 'mng-row-s';
       s.textContent = ov.length
-        ? ov.map(function (f) { return labelOf(f) + ' ' + st.overrides[f] + '회 (기본 ' + g.defaults[f] + ')'; }).join(' · ')
+        ? ov.map(function (f) { return labelOf(f) + ' ' + eff[f] + '회 (기본 ' + effDefault(g, f) + ')'; }).join(' · ')
         : '반 기본값 그대로';
       main.appendChild(s);
       row.appendChild(main);
@@ -1169,12 +1375,14 @@ var Manage = (function () {
     var go = document.createElement('button');
     go.className = 'mng-btn on';
     go.style.width = '100%';
-    go.textContent = g.group_name + '으로 옮기기';
+    go.textContent = g.group_name + '으로 담기';
     go.onclick = function () {
       var ids = Object.keys(picked).filter(function (k) { return picked[k]; });
       if (!ids.length) { msg('옮길 학생을 선택해주세요.', true); return; }
-      if (!confirm(ids.length + '명을 ' + g.group_name + '으로 옮길까요?\n레벨이 ' + (g.level || '반 레벨') + '로 맞춰지고, 이전 반에서 준 예외 회수는 지워집니다.')) return;
-      save('assignStudentsToGroup', [token, groupId, ids], ids.length + '명을 옮겼어요.');
+      ids.forEach(function (sid) { draft.moves[sid] = groupId; });
+      picking = false;
+      render();
+      msg('아래 저장 버튼을 누르면 반영돼요.');
     };
     box.appendChild(go);
     return box;
@@ -1189,25 +1397,20 @@ var Manage = (function () {
     box.style.padding = '4px 0 10px';
 
     COUNTS.forEach(function (c) {
-      var cur = st[c.field];
-      box.appendChild(stepper(c.label, cur, function (next) {
-        var patch = {};
-        // 반 기본값과 같아지면 예외를 지운다(빈 값 = 기본값 따름)
-        patch[c.field] = (next === g.defaults[c.field]) ? null : next;
-        save('saveStudentSettings', [token, st.student_id, patch],
-          st.name + ' ' + c.label + ' ' + next + '회' + (patch[c.field] === null ? ' (기본값)' : ''));
-      }));
+      var d = draft.students[st.student_id];
+      box.appendChild(stepper(c.label, effCount(g, st, c.field), function (next) {
+        setStudentCount(g, st, c.field, next);
+      }, !!(d && d[c.field] !== undefined)));
     });
 
-    if (Object.keys(st.overrides || {}).length) {
+    if (Object.keys(effOverrides(g, st)).length) {
       var reset = document.createElement('button');
       reset.className = 'mng-btn';
       reset.style.width = '100%';
       reset.textContent = '전부 반 기본값으로 되돌리기';
       reset.onclick = function () {
-        save('saveStudentSettings', [token, st.student_id,
-          { voca_count: null, read_count: null, pattern_count: null }],
-          st.name + '을 반 기본값으로 되돌렸어요.');
+        draft.students[st.student_id] = { voca_count: null, read_count: null, pattern_count: null };
+        render();
       };
       box.appendChild(reset);
     }
@@ -1222,8 +1425,9 @@ var Manage = (function () {
       b.style.marginLeft = '6px';
       b.textContent = og.group_name + '으로';
       b.onclick = function () {
-        if (!confirm(st.name + '을 ' + og.group_name + '으로 옮길까요?')) return;
-        save('assignStudentsToGroup', [token, og.group_id, [st.student_id]], st.name + '을 ' + og.group_name + '으로 옮겼어요.');
+        draft.moves[st.student_id] = og.group_id;
+        render();
+        msg('아래 저장 버튼을 누르면 반영돼요.');
       };
       move.appendChild(b);
     });
@@ -1238,19 +1442,8 @@ var Manage = (function () {
     return d;
   }
 
-  /** 저장 후 항상 다시 읽어 화면을 서버 상태와 맞춘다 */
-  function save(action, args, okMsg) {
-    msg('저장 중...');
-    Server.call(action, args, function (res) {
-      if (!res.ok) {
-        if (res.needLogin) { App.logout(); return; }
-        msg(res.message || '저장하지 못했어요.', true);
-        return;
-      }
-      open({ token: token });
-      msg('✅ ' + okMsg);
-    });
-  }
+  /** 저장 안 한 변경분이 있는지 — 다른 화면으로 나갈 때 확인용 */
+  function hasUnsaved() { return dirtyCount() > 0; }
 
   function msg(text, isErr) {
     var el = $('mng-msg');
@@ -1259,7 +1452,7 @@ var Manage = (function () {
     el.style.color = isErr ? 'var(--danger)' : 'var(--muted)';
   }
 
-  return { open: open };
+  return { open: open, hasUnsaved: hasUnsaved };
 })();
 
 /**
@@ -2349,7 +2542,7 @@ App.init();
 // ===== 빌드 표식 =====
 // 폰이 어떤 셸 버전을 쓰는지 로그인 화면에서 눈으로 확인하기 위한 표식.
 // sw.js의 CACHE_VERSION과 함께 올린다. 폰에 이 값이 안 보이면 구버전 캐시를 쓰는 것.
-var BUILD_VERSION = 'shell-v13';
+var BUILD_VERSION = 'shell-v14';
 (function () {
   var el = document.getElementById('build-stamp');
   if (el) el.textContent = BUILD_VERSION;
