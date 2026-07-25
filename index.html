@@ -346,6 +346,7 @@
   }
   .rc-main-btn.stop { background: linear-gradient(120deg, #3b4368, #232b54); box-shadow: 0 8px 18px rgba(35, 43, 84, .30); }
   .rc-main-btn.submit { background: linear-gradient(120deg, var(--primary), var(--primary-2)); box-shadow: 0 8px 18px rgba(91, 108, 255, .35); }
+  .rc-photo { max-width: 100%; max-height: 320px; border-radius: 12px; margin: 12px auto 0; display: block; box-shadow: 0 4px 12px rgba(27,35,64,.18); }
   .rc-main-btn:disabled { opacity: .5; }
   .rc-main-btn:active { transform: scale(.96); }
   .rc-sub-btn { border: none; background: none; color: var(--muted); font-size: 14px;
@@ -566,6 +567,9 @@
       <div class="rc-timer" id="rc-timer">0:00</div>
       <button class="rc-main-btn rec" id="rc-main">🎤 녹음 시작</button>
       <audio class="rc-preview hidden" id="rc-preview" controls></audio>
+      <!-- 사진 제출(write) — 카메라 또는 갤러리에서 선택. capture는 폰에서 바로 카메라를 연다 -->
+      <input type="file" id="rc-file" accept="image/*" capture="environment" class="hidden">
+      <img class="rc-photo hidden" id="rc-photo" alt="제출할 사진 미리보기">
       <div><button class="rc-sub-btn hidden" id="rc-again">다시 녹음하기</button></div>
     </div>
 
@@ -889,7 +893,12 @@ var Server = (function () {
         { item_id:'AI-4', submission_id:'SUB-4', student_id:'S001', student_name:'김철수', group_id:'G-A',
           subject:'기사', label:'기사 본문 읽기', seq:'', action_mode:'read', bucket:'재제출요청',
           item_status:'재제출요청', due_date:'2026-07-26', due_time:'21:00', attempt_no:1, attempts:1,
-          submitted_at:'2026-07-26 18:02:00', flag:'', review_status:'반려', has_audio:true, comment:'조금 더 크게 읽어볼까요?' }
+          submitted_at:'2026-07-26 18:02:00', flag:'', review_status:'반려', has_audio:true, comment:'조금 더 크게 읽어볼까요?' },
+        // 사진 제출(QnA 손글씨·파닉스 쓰기) — 검사 화면이 <img>로 보여줘야 하는 건
+        { item_id:'AI-5', submission_id:'SUB-5', student_id:'S002', student_name:'이영희', group_id:'G-A',
+          subject:'QnA', label:'Q&A 서술형 답안', seq:'', action_mode:'write', bucket:'미검사',
+          item_status:'제출완료', due_date:'2026-07-27', due_time:'21:00', attempt_no:1, attempts:1,
+          submitted_at:'2026-07-27 20:40:12', flag:'', review_status:'대기', has_audio:true, comment:'' }
       ]
     },
     getReviewBoard: function (token, groupId, dueDate) {
@@ -912,7 +921,13 @@ var Server = (function () {
         groups: [{ group_id:'G-A', group_name:'A반' }, { group_id:'G-B', group_name:'B반' }],
         dueDates: ['2026-07-27', '2026-07-26'], rows: rows, counts: counts };
     },
-    getSubmissionAudio: function () {
+    getSubmissionAudio: function (token, submissionId) {
+      // 사진 제출 건이면 이미지로 — 검사 화면이 <img>/<audio>를 제대로 갈라 쓰는지 확인용
+      var row = this._rv.rows.filter(function (r) { return r.submission_id === submissionId; })[0];
+      if (row && row.action_mode === 'write') {
+        return { ok: true, mimeType: 'image/png', attempt_no: 1, submitted_at: '2026-07-27 20:40:12',
+          base64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==' };
+      }
       // 무음 wav 한 조각 — 재생 컨트롤이 뜨는지만 확인하는 용도
       return { ok: true, mimeType: 'audio/wav', attempt_no: 1, submitted_at: '2026-07-27 19:20:11',
         base64: 'UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA=' };
@@ -1205,7 +1220,8 @@ var Review = (function () {
     if (r.has_audio) {
       var play = document.createElement('button');
       play.className = 'rv-btn primary';
-      play.textContent = openItem === r.item_id ? '닫기' : '▶ 듣고 검사';
+      play.textContent = openItem === r.item_id ? '닫기'
+        : (r.action_mode === 'write' ? '📷 사진 보고 검사' : '▶ 듣고 검사');
       play.onclick = function () {
         openItem = (openItem === r.item_id) ? null : r.item_id;
         renderList();
@@ -1244,22 +1260,32 @@ var Review = (function () {
 
     var loading = document.createElement('div');
     loading.className = 'rv-meta';
-    loading.textContent = '녹음 불러오는 중...';
+    loading.textContent = '제출물 불러오는 중...';
     p.appendChild(loading);
 
+    // 파일은 드라이브 직링크가 아니라 서버 프록시(base64)로 받는다. 녹음이면 재생,
+    // 사진(QnA 손글씨·파닉스 쓰기)이면 이미지로 보여준다.
     Server.call('getSubmissionAudio', [token, r.submission_id], function (res) {
       loading.remove();
       if (!res.ok) {
         var e = document.createElement('div');
         e.className = 'rv-meta'; e.style.color = 'var(--danger)';
-        e.textContent = res.message || '녹음을 불러오지 못했어요.';
+        e.textContent = res.message || '제출물을 불러오지 못했어요.';
         p.insertBefore(e, p.firstChild);
         return;
       }
-      var au = document.createElement('audio');
-      au.controls = true;
-      au.src = 'data:' + (res.mimeType || 'audio/mpeg') + ';base64,' + res.base64;
-      p.insertBefore(au, p.firstChild);
+      var mime = res.mimeType || 'audio/mpeg';
+      var el;
+      if (mime.indexOf('image/') === 0) {
+        el = document.createElement('img');
+        el.className = 'rc-photo';
+        el.alt = r.student_name + ' 제출 사진';
+      } else {
+        el = document.createElement('audio');
+        el.controls = true;
+      }
+      el.src = 'data:' + mime + ';base64,' + res.base64;
+      p.insertBefore(el, p.firstChild);
     });
 
     // 회차 이력(2회 이상일 때만)
@@ -2360,7 +2386,10 @@ var App = (function () {
     var loginScreens = ['screen-loading', 'screen-group', 'screen-name', 'screen-pin'];
     document.querySelector('.brand').classList.toggle('hidden', loginScreens.indexOf(id) === -1);
     // 거울 모드: 듣기·녹음 화면에서 자동 켜기, 그 외 화면에서는 완전 끄기
-    if (id === 'screen-listen' || id === 'screen-record') Mirror.enter();
+    // 거울 모드는 듣기·녹음에서만. 사진 제출은 뒷면 카메라로 공책을 찍는 화면이라
+    // 전면 카메라를 잡고 있으면 기기에 따라 촬영이 막힌다.
+    var photoMode = (id === 'screen-record' && Rec && Rec.mode === 'photo');
+    if ((id === 'screen-listen' || id === 'screen-record') && !photoMode) Mirror.enter();
     else Mirror.stop();
   }
   function saveSession(s) { localStorage.setItem(SESSION_KEY, JSON.stringify(s)); }
@@ -2594,7 +2623,10 @@ var App = (function () {
   function openItem(c) {
     if (c.status === '제출완료' || c.status === '면제') return;
     if (c.action_type === 'listen') { openListen(c); return; }
-    if (c.action_type === 'record' || c.action_type === 'read') { openRecord(c); return; }
+    // write = 사진 제출(QnA 손글씨·파닉스 쓰기)도 같은 화면을 쓴다 — 촬영/미리보기/제출
+    if (c.action_type === 'record' || c.action_type === 'read' || c.action_type === 'write') {
+      openRecord(c); return;
+    }
     var meta = ACTION_META[c.action_type] || ACTION_META.listen;
     alert(meta.label + ' 화면은 다음 업데이트에서 열려요!\n(' + c.label + ')');
   }
@@ -2602,19 +2634,29 @@ var App = (function () {
   // ===== S-03 녹음·제출 =====
   var Rec = { item: null, blob: null, mimeType: '', timer: null, state: 'idle' }; // idle | recording | preview | uploading | done
 
+  /**
+   * 제출 화면 상태 전환. 녹음(audio)과 사진(photo) 두 모드를 같은 화면에서 쓴다.
+   * 사진 모드는 타이머·녹음중 단계가 없고 idle → preview → uploading 으로 간다.
+   */
   function rcSetState(state) {
     Rec.state = state;
+    var photo = Rec.mode === 'photo';
     var main = $('rc-main');
     var label = $('rc-state-label');
-    $('rc-preview').classList.toggle('hidden', state !== 'preview');
+    $('rc-preview').classList.toggle('hidden', photo || state !== 'preview');
+    $('rc-photo').classList.toggle('hidden', !photo || state !== 'preview');
+    $('rc-timer').classList.toggle('hidden', photo);
     $('rc-again').classList.toggle('hidden', state !== 'preview');
+    $('rc-again').textContent = photo ? '다시 찍기' : '다시 녹음하기';
     $('rc-stage').classList.toggle('hidden', state === 'done');
     $('rc-done').classList.toggle('hidden', state !== 'done');
     if (state === 'idle') {
       main.className = 'rc-main-btn rec';
-      main.textContent = '🎤 녹음 시작';
+      main.textContent = photo ? '📷 사진 찍기' : '🎤 녹음 시작';
       main.disabled = false;
-      label.textContent = '녹음 버튼을 누르고 또박또박 읽어주세요';
+      label.textContent = photo
+        ? '답을 쓴 공책이 잘 보이게 찍어주세요'
+        : '녹음 버튼을 누르고 또박또박 읽어주세요';
       $('rc-timer').textContent = '0:00';
     } else if (state === 'recording') {
       main.className = 'rc-main-btn stop';
@@ -2625,7 +2667,7 @@ var App = (function () {
       main.className = 'rc-main-btn submit';
       main.textContent = '📤 선생님께 제출하기';
       main.disabled = false;
-      label.textContent = '들어보고 마음에 들면 제출해요';
+      label.textContent = photo ? '글씨가 잘 보이면 제출해요' : '들어보고 마음에 들면 제출해요';
     } else if (state === 'uploading') {
       main.className = 'rc-main-btn submit';
       main.textContent = '보내는 중...';
@@ -2643,8 +2685,14 @@ var App = (function () {
   function rcStopTimer() { if (Rec.timer) { clearInterval(Rec.timer); Rec.timer = null; } }
 
   function openRecord(c) {
+    // 세션이 없으면(만료·캐시 삭제) 아래에서 loadSession().token 접근이 예외를 던져
+    // 화면만 뜨고 버튼이 전부 죽은 상태가 된다. 로그인으로 돌려보낸다.
+    var sess0 = loadSession();
+    if (!sess0 || !sess0.token) { localStorage.removeItem(SESSION_KEY); loadBootstrap(); return; }
     Rec.item = c;
     Rec.blob = null;
+    // write = 사진 제출(QnA 손글씨 답안, 파닉스 쓰기). 나머지는 녹음.
+    Rec.mode = (c.action_type === 'write') ? 'photo' : 'audio';
     $('rc-subject').textContent = c.subject + ' · ' + (ACTION_META[c.action_type] || ACTION_META.record).label;
     $('rc-title').textContent = c.label + (c.seq ? ' (' + c.seq + ')' : '');
     $('rc-due').textContent = '마감 ' + (c.due_time || '21:00') + (c.overdue ? ' · 마감 지남' : '');
@@ -2676,12 +2724,38 @@ var App = (function () {
     $('rc-again').onclick = function () {
       Rec.blob = null;
       $('rc-preview').src = '';
+      $('rc-photo').src = '';
+      $('rc-file').value = '';   // 같은 파일을 다시 골라도 change가 뜨도록 비운다
       rcSetState('idle');
     };
     $('rc-main').onclick = rcMainAction;
+
+    // 사진 선택 → 미리보기. 촬영·갤러리 모두 여기로 들어온다.
+    $('rc-file').onchange = function () {
+      var f = this.files && this.files[0];
+      if (!f) return;
+      if (f.size > 12 * 1024 * 1024) {
+        $('rc-msg').textContent = '사진이 너무 커요(12MB 넘음). 다시 찍어주세요.';
+        $('rc-msg').className = 'ls-msg bad';
+        this.value = '';
+        return;
+      }
+      Rec.blob = f;
+      Rec.mimeType = f.type || 'image/jpeg';
+      $('rc-photo').src = URL.createObjectURL(f);
+      $('rc-msg').textContent = '';
+      $('rc-msg').className = 'ls-msg';
+      rcSetState('preview');
+    };
   }
 
   function rcMainAction() {
+    // 사진 모드: 찍기 → 미리보기 → 제출 (녹음 단계 없음)
+    if (Rec.mode === 'photo') {
+      if (Rec.state === 'idle') $('rc-file').click();
+      else if (Rec.state === 'preview') rcSubmit();
+      return;
+    }
     if (Rec.state === 'idle') {
       if (!window.Recorder || !Recorder.isSupported()) {
         $('rc-msg').textContent = '이 브라우저는 녹음을 지원하지 않아요. 크롬이나 사파리로 열어주세요.';
@@ -2766,6 +2840,8 @@ var App = (function () {
   function openListen(c) {
     show('screen-loading');
     var sess = loadSession();
+    // 세션 없으면 sess.token에서 예외가 나 로딩 화면에 갇힌다 — 로그인으로 돌려보낸다
+    if (!sess || !sess.token) { localStorage.removeItem(SESSION_KEY); loadBootstrap(); return; }
     Server.call('getListenData', [sess.token, c.item_id], function (res) {
       if (!res.ok) {
         if (res.needLogin) { localStorage.removeItem(SESSION_KEY); loadBootstrap(); return; }
@@ -2956,7 +3032,7 @@ App.init();
 // ===== 빌드 표식 =====
 // 폰이 어떤 셸 버전을 쓰는지 로그인 화면에서 눈으로 확인하기 위한 표식.
 // sw.js의 CACHE_VERSION과 함께 올린다. 폰에 이 값이 안 보이면 구버전 캐시를 쓰는 것.
-var BUILD_VERSION = 'shell-v15';
+var BUILD_VERSION = 'shell-v16';
 (function () {
   var el = document.getElementById('build-stamp');
   if (el) el.textContent = BUILD_VERSION;
