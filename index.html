@@ -235,8 +235,17 @@
   }
   .dash-date { font-size: 13px; opacity: .85; }
   .dash-name { font-size: 21px; margin-top: 3px; letter-spacing: .5px; }
-  .dash-logout { background: rgba(255,255,255,.18); border: none; color: #fff; font-size: 12px;
-    border-radius: 999px; padding: 6px 12px; cursor: pointer; }
+  .dash-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+  .dash-logout, .dash-mypage { background: rgba(255,255,255,.18); border: none; color: #fff; font-size: 12px;
+    border-radius: 999px; padding: 6px 12px; cursor: pointer; font-family: inherit; white-space: nowrap; }
+  .mp-hist-head { font-size: 15px; font-weight: 700; margin: 18px 4px 8px; font-family: 'Jua', sans-serif; }
+  .mp-hist { display: flex; flex-direction: column; gap: 2px; }
+  .mp-hist-row { display: flex; justify-content: space-between; align-items: baseline; background: var(--card);
+    border-radius: 12px; padding: 11px 14px; box-shadow: var(--shadow-sm); }
+  .mp-hist-label { font-size: 14px; }
+  .mp-hist-date { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .mp-hist-amt { font-size: 15px; font-weight: 700; color: var(--gold); font-family: 'Jua', sans-serif; flex: none; margin-left: 10px; }
+  .mp-empty { text-align: center; color: var(--muted); font-size: 14px; padding: 30px 0; }
   .chips { display: flex; gap: 10px; margin: -26px 6px 6px; position: relative; }
   .chip {
     background: var(--card); border-radius: 999px; padding: 9px 16px; font-size: 14px;
@@ -508,7 +517,10 @@
         <div class="dash-date" id="dash-date"></div>
         <div class="dash-name" id="dash-name"></div>
       </div>
-      <button class="dash-logout" onclick="App.logout()">로그아웃</button>
+      <div class="dash-actions">
+        <button class="dash-mypage" id="dash-mypage-btn">👤 마이페이지</button>
+        <button class="dash-logout" onclick="App.logout()">로그아웃</button>
+      </div>
     </div>
     <div class="chips">
       <div class="chip point" id="chip-point">⭐ 0P</div>
@@ -527,6 +539,27 @@
       <div class="tp-bar"><div id="tp-fill" style="width:0%"></div></div>
     </div>
     <div class="cards" id="hw-cards"></div>
+  </div>
+
+  <!-- 3.7 마이페이지: 포인트 전체 내역·등급·스트릭. 배지함은 지급 엔진이 없어 후속 -->
+  <div id="screen-mypage" class="hidden">
+    <button class="back-btn" onclick="MyPage.close()">&larr; 오늘의 숙제로</button>
+    <div class="dash-head">
+      <div>
+        <div class="dash-date" id="mp-group"></div>
+        <div class="dash-name" id="mp-name"></div>
+      </div>
+    </div>
+    <div class="chips">
+      <div class="chip point" id="mp-point">⭐ 0P</div>
+      <div class="chip streak" id="mp-streak">🔥 0일</div>
+    </div>
+    <div class="tier-box" id="mp-tier-box">
+      <div class="tier-row"><span>내 등급 <b id="mp-tier-cur">Starter</b></span><span id="mp-tier-need"></span></div>
+      <div class="tier-bar"><div id="mp-tier-fill" style="width:0%"></div></div>
+    </div>
+    <div class="mp-hist-head">포인트 내역</div>
+    <div class="mp-hist" id="mp-history"></div>
   </div>
 
   <!-- S-02 듣기 학습 -->
@@ -633,6 +666,7 @@ var Server = (function () {
     saveStudentSettings: ['token', 'studentId', 'patch'],
     assignStudentsToGroup: ['token', 'groupId', 'studentIds'],
     saveManageBatch: ['token', 'changes'],
+    getMyPage: ['token'],
     getReviewBoard: ['token', 'groupId', 'dueDate'],
     getSubmissionAudio: ['token', 'submissionId'],
     getSubmissionHistory: ['token', 'itemId'],
@@ -708,6 +742,18 @@ var Server = (function () {
         progress: { done: 1, total: 5 },
         points: { total: 275, todayAwards: [
           { label: '기본 제출 +10', amount: 10 }, { label: '정시 제출 +5', amount: 5 }, { label: 'A반 2등 제출 +5', amount: 5 }
+        ] },
+        tier: { current: 'Starter', next: 'Builder', progress: 275 / 300, need: 25 },
+        streak: 5 };
+    },
+    getMyPage: function () {
+      return { ok: true, name: '김철수', group_name: 'A반', level: 'Lv3',
+        points: { total: 275, history: [
+          { label: '1등 제출 +8', amount: 8, awarded_at: '2026-07-19 04:17' },
+          { label: '기본 제출 +10', amount: 10, awarded_at: '2026-07-19 04:17' },
+          { label: '5일 연속 +20', amount: 20, awarded_at: '2026-07-18 21:05' },
+          { label: '정시 제출 +5', amount: 5, awarded_at: '2026-07-18 20:58' },
+          { label: '기본 제출 +10', amount: 10, awarded_at: '2026-07-18 20:58' }
         ] },
         tier: { current: 'Starter', next: 'Builder', progress: 275 / 300, need: 25 },
         streak: 5 };
@@ -2407,6 +2453,67 @@ var Assign = (function () {
   return { open: open, addCustom: addCustom, updateSummary: updateSummary, submit: submit };
 })();
 
+/**
+ * MyPage — 학생 마이페이지 (WBS 3.7)
+ * 오늘의 숙제 화면은 "오늘 받은 포인트"만 보여준다. 여기서는 포인트 전체 내역·등급·
+ * 스트릭을 한곳에서 본다. 배지 컬렉션은 넣지 않았다 — MyPage.gs 상단 주석 참고
+ * (배지 지급 코드 자체가 아직 없어 기준이 정해지기 전까지는 빈 화면이 된다).
+ */
+var MyPage = (function () {
+  function $(id) { return document.getElementById(id); }
+  var sess = null;
+
+  function open(s) {
+    sess = s;
+    App.show('screen-mypage');
+    $('mp-history').innerHTML = '<div class="asg-hint">불러오는 중...</div>';
+    Server.call('getMyPage', [sess.token], function (res) {
+      if (!res.ok) {
+        if (res.needLogin) { localStorage.removeItem('cambridge_session'); location.reload(); return; }
+        $('mp-history').innerHTML = '<div class="asg-hint">' + (res.message || '불러오지 못했어요.') + '</div>';
+        return;
+      }
+      render(res);
+    });
+  }
+
+  function render(d) {
+    $('mp-group').textContent = d.group_name + (d.level ? ' · ' + d.level : '');
+    $('mp-name').textContent = d.name + ' 님';
+    $('mp-point').textContent = '⭐ ' + d.points.total + 'P';
+    $('mp-streak').textContent = d.streak > 0 ? '🔥 ' + d.streak + '일 연속' : '🌱 오늘부터 시작!';
+    $('mp-tier-cur').textContent = d.tier.current || 'Starter';
+    $('mp-tier-need').textContent = d.tier.next ? d.tier.next + '까지 ' + d.tier.need + 'P' : '최고 등급!';
+    $('mp-tier-fill').style.width = Math.round(Math.min(1, Math.max(0, d.tier.progress)) * 100) + '%';
+
+    var box = $('mp-history');
+    box.innerHTML = '';
+    var hist = d.points.history || [];
+    if (!hist.length) {
+      box.innerHTML = '<div class="mp-empty">아직 받은 포인트가 없어요. 오늘의 숙제부터 시작해봐요!</div>';
+      return;
+    }
+    hist.forEach(function (h) {
+      var row = document.createElement('div');
+      row.className = 'mp-hist-row';
+      var left = document.createElement('div');
+      var lab = document.createElement('div');
+      lab.className = 'mp-hist-label'; lab.textContent = h.label;
+      var date = document.createElement('div');
+      date.className = 'mp-hist-date'; date.textContent = String(h.awarded_at || '').slice(0, 16);
+      left.appendChild(lab); left.appendChild(date);
+      var amt = document.createElement('div');
+      amt.className = 'mp-hist-amt'; amt.textContent = (h.amount > 0 ? '+' : '') + h.amount + 'P';
+      row.appendChild(left); row.appendChild(amt);
+      box.appendChild(row);
+    });
+  }
+
+  function close() { App.backToDash(sess); }
+
+  return { open: open, close: close };
+})();
+
 var App = (function () {
   var SESSION_KEY = 'cambridge_session';
   var bootstrap = null;
@@ -2415,7 +2522,7 @@ var App = (function () {
 
   function $(id) { return document.getElementById(id); }
   function show(id) {
-    ['screen-loading','screen-group','screen-name','screen-pin','screen-home','screen-assign','screen-manage','screen-review','screen-dash','screen-listen','screen-record'].forEach(function (s) {
+    ['screen-loading','screen-group','screen-name','screen-pin','screen-home','screen-assign','screen-manage','screen-review','screen-dash','screen-mypage','screen-listen','screen-record'].forEach(function (s) {
       $(s).classList.toggle('hidden', s !== id);
     });
     // 로그인 이후 화면에서는 상단 브랜드를 숨겨 공간 확보
@@ -2578,6 +2685,7 @@ var App = (function () {
     var days = ['일', '월', '화', '수', '목', '금', '토'];
     $('dash-date').textContent = (dt.getMonth() + 1) + '월 ' + dt.getDate() + '일 ' + days[dt.getDay()] + '요일';
     $('dash-name').textContent = (sess.student ? sess.student.name : '') + ' 님, 오늘도 화이팅!';
+    $('dash-mypage-btn').onclick = function () { MyPage.open(sess); };
     $('chip-point').textContent = '⭐ ' + d.points.total + 'P';
     $('chip-streak').textContent = d.streak > 0 ? '🔥 ' + d.streak + '일 연속' : '🌱 오늘부터 시작!';
 
@@ -3059,6 +3167,7 @@ var App = (function () {
     showGroups: renderGroups,
     showTeacherLogin: function () { showPin('teacher'); },
     closeListen: closeListen,
+    backToDash: function (sess) { loadDashboard(sess); },
     logout: logout
   };
 })();
@@ -3068,7 +3177,7 @@ App.init();
 // ===== 빌드 표식 =====
 // 폰이 어떤 셸 버전을 쓰는지 로그인 화면에서 눈으로 확인하기 위한 표식.
 // sw.js의 CACHE_VERSION과 함께 올린다. 폰에 이 값이 안 보이면 구버전 캐시를 쓰는 것.
-var BUILD_VERSION = 'shell-v17';
+var BUILD_VERSION = 'shell-v18';
 (function () {
   var el = document.getElementById('build-stamp');
   if (el) el.textContent = BUILD_VERSION;
