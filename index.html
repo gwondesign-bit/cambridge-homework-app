@@ -224,6 +224,41 @@
   @keyframes spin-soft { to { transform: rotate(360deg); } }
   .hidden { display: none; }
 
+  /* ===== 인터랙션 (2026-07-31) — 가볍고 즉각적인 전환·탭 피드백 ===== */
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes screenIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .screen-anim { animation: screenIn .28s cubic-bezier(.25,.7,.3,1) both; }
+  @media (prefers-reduced-motion: reduce) {
+    .screen-anim, .hw-card, .rc-result .big { animation: none !important; }
+  }
+  /* 목록 항목은 새로 생성될 때마다 자동으로 살짝 떠오르며 나타난다.
+     ⚠ .asg-card(T-01 페이지 다이얼)·.mng-row(T-04 회수 스테퍼)·.rv-card(T-02)는
+     일부러 뺐다 — 이 목록들은 화면 로드가 아니라 다이얼·스테퍼·"듣고 검사" 토글을
+     한 번 누를 때마다 그 목록 전체를 다시 그리므로(renderPlan()/render()/renderList()),
+     여기에 애니메이션을 걸면 탭할 때마다 관련 없는 카드까지 깜빡이며 다시 나타나는
+     것처럼 보인다(2026-08-01 확인). 화면에 "처음 들어올 때"만 리스트가 그려지는
+     hw-card(S-01 대시보드)만 적용. */
+  .hw-card { animation: fadeUp .3s ease both; }
+  .hw-card:nth-child(2) { animation-delay: .03s; }
+  .hw-card:nth-child(3) { animation-delay: .06s; }
+  .hw-card:nth-child(4) { animation-delay: .09s; }
+  .hw-card:nth-child(5) { animation-delay: .12s; }
+  .hw-card:nth-child(n+6) { animation-delay: .15s; }
+  /* 선택 상태(칩·탭·다이얼) 전환을 부드럽게 — 색이 뚝 끊기지 않도록 */
+  .asg-chip, .asg-day, .asg-seg-btn, .asg-bt button, .tt-tab, .mng-btn, .rv-chip, .asg-dial button,
+  .rv-btn, .mng-step button, .pin-key, .choice-btn, .hw-card {
+    transition: background-color .15s ease, border-color .15s ease, color .15s ease, transform .08s ease, opacity .15s ease;
+  }
+  .asg-chip:active, .asg-day:active, .asg-seg-btn:active, .asg-bt button:active, .tt-tab:active,
+  .mng-btn:active, .rv-chip:active, .asg-dial button:active, .rv-btn:active, .mng-step button:active {
+    transform: scale(.94);
+  }
+  /* 체크마크가 그려지듯 나타나는 제출 완료 연출 */
+  .rc-result .big { animation: fade-in .25s ease, pop .25s cubic-bezier(.3,1.6,.4,1) .05s both; }
+  @keyframes pop { from { transform: scale(.6); } to { transform: scale(1); } }
+  .rc-result .big svg path { stroke-dasharray: 26; stroke-dashoffset: 26; animation: checkDraw .35s ease .15s forwards; }
+  @keyframes checkDraw { to { stroke-dashoffset: 0; } }
+
   /* ===== S-01 오늘의 숙제 ===== */
   .dash-head { display: flex; align-items: flex-start; justify-content: space-between; padding: 4px 2px 0; }
   .dash-date { font-size: 13px; color: var(--muted); }
@@ -341,7 +376,7 @@
   .rc-preview { width: 100%; margin-top: 14px; }
   .rc-result { text-align: center; }
   .rc-result .big { display: inline-flex; width: 48px; height: 48px; align-items: center; justify-content: center;
-    border-radius: 50%; background: var(--good-bg); color: var(--good); animation: fade-in .3s ease; }
+    border-radius: 50%; background: var(--good-bg); color: var(--good); }
   .rc-result .big svg { width: 24px; height: 24px; }
   @keyframes fade-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
   .rc-result .title { font-size: 20px; margin: 10px 0 4px; font-weight: 700; }
@@ -2462,7 +2497,9 @@ var MyPage = (function () {
     $('mp-streak').textContent = d.streak > 0 ? d.streak + '일 연속' : '오늘부터 시작!';
     $('mp-tier-cur').textContent = d.tier.current || 'Starter';
     $('mp-tier-need').textContent = d.tier.next ? d.tier.next + '까지 ' + d.tier.need + 'P' : '최고 등급!';
-    $('mp-tier-fill').style.width = Math.round(Math.min(1, Math.max(0, d.tier.progress)) * 100) + '%';
+    $('mp-tier-fill').style.width = '0%';
+    var mpTierPct = Math.round(Math.min(1, Math.max(0, d.tier.progress)) * 100) + '%';
+    requestAnimationFrame(function () { requestAnimationFrame(function () { $('mp-tier-fill').style.width = mpTierPct; }); });
 
     var box = $('mp-history');
     box.innerHTML = '';
@@ -2503,6 +2540,11 @@ var App = (function () {
     ['screen-loading','screen-group','screen-name','screen-pin','screen-home','screen-assign','screen-manage','screen-review','screen-dash','screen-mypage','screen-listen','screen-record'].forEach(function (s) {
       $(s).classList.toggle('hidden', s !== id);
     });
+    // 화면 전환마다 살짝 떠오르며 나타나는 연출 (매번 새로 재생되도록 클래스를 뗐다 붙인다)
+    var shown = $(id);
+    shown.classList.remove('screen-anim');
+    void shown.offsetWidth;
+    shown.classList.add('screen-anim');
     // 로그인 이후 화면에서는 상단 브랜드를 숨겨 공간 확보
     var loginScreens = ['screen-loading', 'screen-group', 'screen-name', 'screen-pin'];
     document.querySelector('.brand').classList.toggle('hidden', loginScreens.indexOf(id) === -1);
@@ -2677,7 +2719,8 @@ var App = (function () {
 
     $('tier-cur').textContent = d.tier.current || 'Starter';
     $('tier-need').textContent = d.tier.next ? d.tier.next + '까지 ' + d.tier.need + 'P' : '최고 등급!';
-    $('tier-fill').style.width = Math.round(Math.min(1, Math.max(0, d.tier.progress)) * 100) + '%';
+    $('tier-fill').style.width = '0%';
+    var tierPct = Math.round(Math.min(1, Math.max(0, d.tier.progress)) * 100) + '%';
 
     var awBox = $('awards-box');
     if (d.points.todayAwards.length) {
@@ -2699,7 +2742,15 @@ var App = (function () {
     }
 
     $('tp-count').textContent = d.progress.done + '/' + d.progress.total + ' 완료';
-    $('tp-fill').style.width = d.progress.total ? Math.round(d.progress.done / d.progress.total * 100) + '%' : '0%';
+    $('tp-fill').style.width = '0%';
+    var tpPct = d.progress.total ? Math.round(d.progress.done / d.progress.total * 100) + '%' : '0%';
+    // 화면이 보이기 시작한 뒤(다음 페인트) 목표 너비로 채워 진행바가 자연스럽게 차오르게 한다
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        $('tier-fill').style.width = tierPct;
+        $('tp-fill').style.width = tpPct;
+      });
+    });
 
     // 서버 정렬과 무관하게 화면에서도 상태 우선 정렬을 보장 (재제출요청→미시작→진행중→완료→면제)
     var ORDER = { '재제출요청': 0, '미시작': 1, '진행중': 2, '제출완료': 3, '면제': 4 };
