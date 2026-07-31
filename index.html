@@ -215,22 +215,13 @@
   .rv-hist { font-size: 12px; color: var(--muted); margin-top: 8px; line-height: 1.7; }
   .rv-empty { text-align: center; color: var(--muted); font-size: 14px; padding: 30px 0; }
 
-  .loading { text-align: center; color: var(--muted); padding: 56px 0; }
-  @property --wipe { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
-  .loading .logo-wipe { width: 84px; height: 84px; margin: 0 auto 16px; }
-  .loading .logo-wipe img {
-    width: 100%; height: 100%; object-fit: contain;
-    -webkit-mask-image: conic-gradient(black var(--wipe, 0deg), transparent var(--wipe, 0deg));
-    mask-image: conic-gradient(black var(--wipe, 0deg), transparent var(--wipe, 0deg));
-    animation: logoWipe .7s cubic-bezier(.3,.6,.3,1) both, logoPulse 1.6s ease-in-out .7s infinite;
-  }
-  @keyframes logoWipe { from { --wipe: 0deg; } to { --wipe: 360deg; } }
-  @keyframes logoPulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
-  .loading .dots { display: flex; justify-content: center; gap: 6px; margin-top: 14px; }
-  .loading .dots span { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); animation: loadDot 1.2s infinite; }
-  .loading .dots span:nth-child(2) { animation-delay: .15s; }
-  .loading .dots span:nth-child(3) { animation-delay: .3s; }
-  @keyframes loadDot { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }
+  /* 로딩: 로고가 도는 것 자체가 "진행 중" 신호라 텍스트 안내는 따로 두지 않는다(2026-08-01).
+     conic-gradient 마스크로 훑는 연출은 실기기에서 반쪽만 보이는 문제가 있어(엔진별 @property
+     지원 차이로 추정) 걷어내고, 어떤 엔진에서도 확실히 동작하는 단순 회전으로 바꿨다. */
+  .loading { text-align: center; padding: 56px 0; }
+  .loading .logo-spin { width: 64px; height: 64px; margin: 0 auto; }
+  .loading .logo-spin img { width: 100%; height: 100%; object-fit: contain; animation: logoSpin 1.4s linear infinite; }
+  @keyframes logoSpin { to { transform: rotate(360deg); } }
   .hidden { display: none; }
 
   /* ===== 인터랙션 (2026-07-31) — 가볍고 즉각적인 전환·탭 피드백 ===== */
@@ -403,11 +394,6 @@
     position: absolute; top: 4px; left: 4px; font-size: 9px; color: #fff;
     background: rgba(0,0,0,.5); border-radius: 6px; padding: 1px 5px; z-index: 1;
   }
-  .mirror-caption {
-    position: absolute; left: 0; right: 0; bottom: 0; z-index: 1;
-    font-size: 8.5px; color: #fff; text-align: center; letter-spacing: .3px;
-    background: rgba(0,0,0,.55); padding: 2px 0;
-  }
 </style>
 </head>
 <body>
@@ -419,9 +405,7 @@
   </div>
 
   <div id="screen-loading" class="loading">
-    <div class="logo-wipe"><img src="assets/cambridge-logo.png" alt=""></div>
-    불러오는 중...
-    <div class="dots"><span></span><span></span><span></span></div>
+    <div class="logo-spin"><img src="assets/cambridge-logo.png" alt="불러오는 중"></div>
   </div>
 
   <!-- 1단계: 반 선택 -->
@@ -652,7 +636,6 @@
   <div id="mirror-preview" class="mirror-preview hidden">
     <span class="mirror-badge">학습모드</span>
     <video id="mirror-video" autoplay muted playsinline></video>
-    <span class="mirror-caption">저장 안 돼요</span>
   </div>
 </div>
 
@@ -2960,28 +2943,53 @@ var App = (function () {
       Rec.photoPreviewFailed = false;
       $('rc-photo').src = URL.createObjectURL(blob);
       rcSetState('preview');
+      $('rc-msg').textContent = '';
+      $('rc-msg').className = 'ls-msg';
     }
     // 변환이 끝내 안 되면(디코딩 자체가 막히는 기기) 원본 파일 그대로 제출은 가능하게
     // 하되, 미리보기 자리에는 깨진 사진 아이콘 대신 안내 문구만 남긴다.
     // ⚠ 예전 버전은 여기서 실패한 원본 파일을 그대로 <img>에 넣었는데, 애초에
     // 그 파일이 안 열려서 실패한 거라 깨진 아이콘이 그대로 재현되는 문제가 있었다(2026-08-01).
-    function fail() {
+    //
+    // 🔧 임시 디버그(2026-08-01): 실기기에서 두 번의 추측성 수정이 다 안 먹혀서,
+    // 원인을 실제로 보기 전까지는 실패 사유를 화면에 그대로 찍는다. 원인을 알고 나면
+    // 이 디버그 문구는 지운다 — 정상 문구는 "이 사진은 여기서 미리보기만 안 될 뿐..." 한 줄뿐.
+    function fail(reason) {
       Rec.blob = f;
       Rec.mimeType = f.type || 'image/jpeg';
       Rec.photoPreviewFailed = true;
       rcSetState('preview');
+      $('rc-msg').textContent = '[디버그] ' + (f.type || '타입없음') + ' ' + Math.round((f.size || 0) / 1024) +
+        'KB — ' + reason + ' · 제출은 원본 파일로 정상 진행돼요.';
+      $('rc-msg').className = 'ls-msg';
     }
     function toJpeg(bitmap) {
-      var canvas = document.createElement('canvas');
-      canvas.width = bitmap.width; canvas.height = bitmap.height;
-      canvas.getContext('2d').drawImage(bitmap, 0, 0);
-      canvas.toBlob(function (jpegBlob) { jpegBlob ? apply(jpegBlob, 'image/jpeg') : fail(); }, 'image/jpeg', 0.85);
+      try {
+        var canvas = document.createElement('canvas');
+        canvas.width = bitmap.width; canvas.height = bitmap.height;
+        canvas.getContext('2d').drawImage(bitmap, 0, 0);
+        canvas.toBlob(function (jpegBlob) { jpegBlob ? apply(jpegBlob, 'image/jpeg') : fail('toBlob 실패'); }, 'image/jpeg', 0.85);
+      } catch (eCanvas) {
+        fail('캔버스 오류: ' + (eCanvas && eCanvas.message));
+      }
     }
-    if (!window.createImageBitmap) { fail(); return; }
-    createImageBitmap(f, { imageOrientation: 'from-image' }).then(toJpeg).catch(function () {
-      // imageOrientation 옵션 자체를 못 받는 구형 엔진 대비 — 옵션 없이 한 번 더 시도
-      createImageBitmap(f).then(toJpeg).catch(fail);
-    });
+    // createImageBitmap 자체가 동기적으로 예외를 던지는 엔진도 있어 try로 감싼다
+    // (그냥 .catch()만 걸면 이런 동기 예외는 못 잡고 화면이 그대로 멈춘 것처럼 보인다).
+    try {
+      if (!window.createImageBitmap) { fail('createImageBitmap 미지원'); return; }
+      createImageBitmap(f, { imageOrientation: 'from-image' }).then(toJpeg).catch(function (e1) {
+        try {
+          // imageOrientation 옵션 자체를 못 받는 구형 엔진 대비 — 옵션 없이 한 번 더 시도
+          createImageBitmap(f).then(toJpeg).catch(function (e2) {
+            fail('디코딩 실패: ' + (e2 && e2.message || e1 && e1.message));
+          });
+        } catch (eRetry) {
+          fail('재시도 오류: ' + (eRetry && eRetry.message));
+        }
+      });
+    } catch (eSync) {
+      fail('동기 오류: ' + (eSync && eSync.message));
+    }
   }
 
   function rcMainAction() {
