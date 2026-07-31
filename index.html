@@ -216,12 +216,21 @@
   .rv-empty { text-align: center; color: var(--muted); font-size: 14px; padding: 30px 0; }
 
   .loading { text-align: center; color: var(--muted); padding: 56px 0; }
-  .loading::before {
-    content: ''; display: block; width: 34px; height: 34px; margin: 0 auto 14px;
-    border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--accent);
-    animation: spin-soft .9s linear infinite;
+  @property --wipe { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+  .loading .logo-wipe { width: 84px; height: 84px; margin: 0 auto 16px; }
+  .loading .logo-wipe img {
+    width: 100%; height: 100%; object-fit: contain;
+    -webkit-mask-image: conic-gradient(black var(--wipe, 0deg), transparent var(--wipe, 0deg));
+    mask-image: conic-gradient(black var(--wipe, 0deg), transparent var(--wipe, 0deg));
+    animation: logoWipe .7s cubic-bezier(.3,.6,.3,1) both, logoPulse 1.6s ease-in-out .7s infinite;
   }
-  @keyframes spin-soft { to { transform: rotate(360deg); } }
+  @keyframes logoWipe { from { --wipe: 0deg; } to { --wipe: 360deg; } }
+  @keyframes logoPulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+  .loading .dots { display: flex; justify-content: center; gap: 6px; margin-top: 14px; }
+  .loading .dots span { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); animation: loadDot 1.2s infinite; }
+  .loading .dots span:nth-child(2) { animation-delay: .15s; }
+  .loading .dots span:nth-child(3) { animation-delay: .3s; }
+  @keyframes loadDot { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }
   .hidden { display: none; }
 
   /* ===== 인터랙션 (2026-07-31) — 가볍고 즉각적인 전환·탭 피드백 ===== */
@@ -409,7 +418,11 @@
     <p id="build-stamp" class="build-stamp"></p>
   </div>
 
-  <div id="screen-loading" class="loading">불러오는 중...</div>
+  <div id="screen-loading" class="loading">
+    <div class="logo-wipe"><img src="assets/cambridge-logo.png" alt=""></div>
+    불러오는 중...
+    <div class="dots"><span></span><span></span><span></span></div>
+  </div>
 
   <!-- 1단계: 반 선택 -->
   <div id="screen-group" class="hidden">
@@ -2813,7 +2826,7 @@ var App = (function () {
   }
 
   // ===== S-03 녹음·제출 =====
-  var Rec = { item: null, blob: null, mimeType: '', timer: null, state: 'idle' }; // idle | recording | preview | uploading | done
+  var Rec = { item: null, blob: null, mimeType: '', timer: null, state: 'idle', photoPreviewFailed: false }; // idle | recording | preview | uploading | done
 
   /**
    * 제출 화면 상태 전환. 녹음(audio)과 사진(photo) 두 모드를 같은 화면에서 쓴다.
@@ -2825,7 +2838,7 @@ var App = (function () {
     var main = $('rc-main');
     var label = $('rc-state-label');
     $('rc-preview').classList.toggle('hidden', photo || state !== 'preview');
-    $('rc-photo').classList.toggle('hidden', !photo || state !== 'preview');
+    $('rc-photo').classList.toggle('hidden', !photo || state !== 'preview' || Rec.photoPreviewFailed);
     $('rc-timer').classList.toggle('hidden', photo);
     $('rc-again').classList.toggle('hidden', state !== 'preview');
     $('rc-again').textContent = photo ? '다시 찍기' : '다시 녹음하기';
@@ -2849,7 +2862,8 @@ var App = (function () {
       main.className = 'rc-main-btn submit';
       main.textContent = '선생님께 제출하기';
       main.disabled = false;
-      label.textContent = photo ? '글씨가 잘 보이면 제출해요' : '들어보고 마음에 들면 제출해요';
+      label.textContent = !photo ? '들어보고 마음에 들면 제출해요'
+        : (Rec.photoPreviewFailed ? '이 사진은 여기서 미리보기만 안 될 뿐, 제출은 정상적으로 돼요' : '글씨가 잘 보이면 제출해요');
     } else if (state === 'uploading') {
       main.className = 'rc-main-btn submit';
       main.textContent = '보내는 중...';
@@ -2873,6 +2887,7 @@ var App = (function () {
     if (!sess0 || !sess0.token) { localStorage.removeItem(SESSION_KEY); loadBootstrap(); return; }
     Rec.item = c;
     Rec.blob = null;
+    Rec.photoPreviewFailed = false;
     // write = 사진 제출(QnA 손글씨 답안, 파닉스 쓰기). 나머지는 녹음.
     Rec.mode = (c.action_type === 'write') ? 'photo' : 'audio';
     $('rc-subject').textContent = c.subject + ' · ' + (ACTION_META[c.action_type] || ACTION_META.record).label;
@@ -2905,6 +2920,7 @@ var App = (function () {
     $('rc-done-back').onclick = function () { loadDashboard(loadSession()); };
     $('rc-again').onclick = function () {
       Rec.blob = null;
+      Rec.photoPreviewFailed = false;
       $('rc-preview').src = '';
       $('rc-photo').src = '';
       $('rc-file').value = '';   // 같은 파일을 다시 골라도 change가 뜨도록 비운다
@@ -2936,25 +2952,35 @@ var App = (function () {
    * 사진이 캔버스를 거치면서 눕는 문제가 생긴다).
    */
   function usePhoto_(f) {
+    // 성공하면 항상 JPEG로 재인코딩된 결과를 쓴다 — 미리보기와 제출 파일이 같아야
+    // "미리보기엔 깨져 보이는데 실제 제출 파일은 멀쩡함" 같은 혼란이 없다.
     function apply(blob, mime) {
       Rec.blob = blob;
       Rec.mimeType = mime;
+      Rec.photoPreviewFailed = false;
       $('rc-photo').src = URL.createObjectURL(blob);
-      $('rc-msg').textContent = '';
-      $('rc-msg').className = 'ls-msg';
       rcSetState('preview');
     }
-    if (!window.createImageBitmap) { apply(f, f.type || 'image/jpeg'); return; }
-    createImageBitmap(f, { imageOrientation: 'from-image' }).then(function (bitmap) {
+    // 변환이 끝내 안 되면(디코딩 자체가 막히는 기기) 원본 파일 그대로 제출은 가능하게
+    // 하되, 미리보기 자리에는 깨진 사진 아이콘 대신 안내 문구만 남긴다.
+    // ⚠ 예전 버전은 여기서 실패한 원본 파일을 그대로 <img>에 넣었는데, 애초에
+    // 그 파일이 안 열려서 실패한 거라 깨진 아이콘이 그대로 재현되는 문제가 있었다(2026-08-01).
+    function fail() {
+      Rec.blob = f;
+      Rec.mimeType = f.type || 'image/jpeg';
+      Rec.photoPreviewFailed = true;
+      rcSetState('preview');
+    }
+    function toJpeg(bitmap) {
       var canvas = document.createElement('canvas');
       canvas.width = bitmap.width; canvas.height = bitmap.height;
       canvas.getContext('2d').drawImage(bitmap, 0, 0);
-      canvas.toBlob(function (jpegBlob) {
-        apply(jpegBlob || f, jpegBlob ? 'image/jpeg' : (f.type || 'image/jpeg'));
-      }, 'image/jpeg', 0.85);
-    }).catch(function () {
-      // 디코딩 자체가 안 되는 포맷이면(극히 드묾) 원본 그대로 시도 — 이전 동작과 동일
-      apply(f, f.type || 'image/jpeg');
+      canvas.toBlob(function (jpegBlob) { jpegBlob ? apply(jpegBlob, 'image/jpeg') : fail(); }, 'image/jpeg', 0.85);
+    }
+    if (!window.createImageBitmap) { fail(); return; }
+    createImageBitmap(f, { imageOrientation: 'from-image' }).then(toJpeg).catch(function () {
+      // imageOrientation 옵션 자체를 못 받는 구형 엔진 대비 — 옵션 없이 한 번 더 시도
+      createImageBitmap(f).then(toJpeg).catch(fail);
     });
   }
 

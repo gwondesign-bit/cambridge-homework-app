@@ -7,7 +7,7 @@
  * 셸 파일을 바꿀 때마다 CACHE_VERSION을 올려야 기존 설치 기기에 반영된다.
  */
 
-var CACHE_VERSION = 'shell-v20';
+var CACHE_VERSION = 'shell-v21';
 var SHELL_ASSETS = [
   './',
   './index.html',
@@ -15,7 +15,8 @@ var SHELL_ASSETS = [
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png',
-  './icons/icon-512-maskable.png'
+  './icons/icon-512-maskable.png',
+  './assets/cambridge-logo.png'
 ];
 
 self.addEventListener('install', function (e) {
