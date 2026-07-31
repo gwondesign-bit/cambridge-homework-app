@@ -226,8 +226,8 @@
 
   /* ===== 인터랙션 (2026-07-31) — 가볍고 즉각적인 전환·탭 피드백 ===== */
   @keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
-  @keyframes screenIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-  .screen-anim { animation: screenIn .28s cubic-bezier(.25,.7,.3,1) both; }
+  @keyframes screenIn { from { opacity: 0; transform: translateY(18px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+  .screen-anim { animation: screenIn .38s cubic-bezier(.22,.8,.28,1) both; }
   @media (prefers-reduced-motion: reduce) {
     .screen-anim, .hw-card, .rc-result .big { animation: none !important; }
   }
@@ -2922,13 +2922,40 @@ var App = (function () {
         this.value = '';
         return;
       }
-      Rec.blob = f;
-      Rec.mimeType = f.type || 'image/jpeg';
-      $('rc-photo').src = URL.createObjectURL(f);
+      usePhoto_(f);
+    };
+  }
+
+  /**
+   * 아이폰 카메라가 HEIC로 찍은 사진은 기기·설치형 PWA에 따라 <img> 미리보기가
+   * 깨져 보이는 경우가 있다(원장 실기기 확인, 2026-08-01). createImageBitmap으로
+   * 한 번 디코딩해 캔버스에 그린 뒤 JPEG로 다시 인코딩해서 미리보기·제출 모두
+   * 이 결과물을 쓴다 — 포맷을 항상 확실히 지원되는 JPEG로 통일한다(음원 프록시와
+   * 같은 이유: 기기·웹뷰가 못 다루는 포맷을 믿지 않고 서버/클라이언트가 직접 변환).
+   * imageOrientation:'from-image'로 EXIF 회전을 반영해 그린다(안 하면 세로로 찍은
+   * 사진이 캔버스를 거치면서 눕는 문제가 생긴다).
+   */
+  function usePhoto_(f) {
+    function apply(blob, mime) {
+      Rec.blob = blob;
+      Rec.mimeType = mime;
+      $('rc-photo').src = URL.createObjectURL(blob);
       $('rc-msg').textContent = '';
       $('rc-msg').className = 'ls-msg';
       rcSetState('preview');
-    };
+    }
+    if (!window.createImageBitmap) { apply(f, f.type || 'image/jpeg'); return; }
+    createImageBitmap(f, { imageOrientation: 'from-image' }).then(function (bitmap) {
+      var canvas = document.createElement('canvas');
+      canvas.width = bitmap.width; canvas.height = bitmap.height;
+      canvas.getContext('2d').drawImage(bitmap, 0, 0);
+      canvas.toBlob(function (jpegBlob) {
+        apply(jpegBlob || f, jpegBlob ? 'image/jpeg' : (f.type || 'image/jpeg'));
+      }, 'image/jpeg', 0.85);
+    }).catch(function () {
+      // 디코딩 자체가 안 되는 포맷이면(극히 드묾) 원본 그대로 시도 — 이전 동작과 동일
+      apply(f, f.type || 'image/jpeg');
+    });
   }
 
   function rcMainAction() {
