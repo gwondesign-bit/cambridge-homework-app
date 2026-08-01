@@ -710,21 +710,41 @@ var Server = (function () {
     return body;
   }
 
+  /**
+   * 조회(읽기)뿐인 액션만 자동 재시도한다(WBS 6.3). 네트워크가 잠깐 끊겼다가
+   * 돌아오는 흔한 경우를 사용자가 알아채기도 전에 넘긴다. 제출·배부·검사처럼
+   * 부작용이 있는 액션은 자동 재시도하지 않는다 — 서버는 처리했는데 응답만
+   * 못 받은 경우 자동으로 다시 보내면 중복 제출·중복 카운트가 생길 수 있다.
+   * 그런 액션은 실패를 그대로 알려 학생·선생님이 보고 다시 누르게 한다.
+   */
+  var IDEMPOTENT_ACTIONS_ = {
+    getLoginBootstrap: true, verifySession: true, getTodayDashboard: true, getMyPage: true,
+    getListenData: true, getAudioForUnit: true, getAssignBootstrap: true, getManageData: true,
+    getReviewBoard: true, getSubmissionAudio: true, getSubmissionHistory: true, ping: true
+  };
+
   if (!useMock) {
     return {
       call: function (fn, args, onOk, onErr) {
         var body = bodyOf(fn, args);
-        fetch(API_URL, {
-          method: 'POST',
-          // text/plain: CORS preflight를 만들지 않는 안전한 타입 (설계결정문서 5.13)
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify(body)
-        })
-          .then(function (r) { return r.json(); })
-          .then(onOk)
-          .catch(onErr || function () {
-            alert('연결에 문제가 있어요. 인터넷을 확인하고 다시 해보세요.');
-          });
+        var canRetry = !!IDEMPOTENT_ACTIONS_[fn];
+        var attempt = function (isRetry) {
+          fetch(API_URL, {
+            method: 'POST',
+            // text/plain: CORS preflight를 만들지 않는 안전한 타입 (설계결정문서 5.13)
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(body)
+          })
+            .then(function (r) { return r.json(); })
+            .then(onOk)
+            .catch(function (err) {
+              if (canRetry && !isRetry) { setTimeout(function () { attempt(true); }, 1200); return; }
+              (onErr || function () {
+                alert('연결에 문제가 있어요. 인터넷을 확인하고 다시 해보세요.');
+              })(err);
+            });
+        };
+        attempt(false);
       }
     };
   }
@@ -3317,7 +3337,7 @@ App.init();
 // ===== 빌드 표식 =====
 // 폰이 어떤 셸 버전을 쓰는지 로그인 화면에서 눈으로 확인하기 위한 표식.
 // sw.js의 CACHE_VERSION과 함께 올린다. 폰에 이 값이 안 보이면 구버전 캐시를 쓰는 것.
-var BUILD_VERSION = 'shell-v26';
+var BUILD_VERSION = 'shell-v27';
 (function () {
   var el = document.getElementById('build-stamp');
   if (el) el.textContent = BUILD_VERSION;
