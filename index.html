@@ -337,6 +337,10 @@
     font-size: 15px; line-height: 2.0; max-height: 40vh; overflow-y: auto; white-space: pre-wrap;
   }
   .ls-transcript.empty { color: var(--muted); text-align: center; font-size: 14px; }
+  /* Quick TTS(WBS 3.3) — 단어 탭 시 발음 재생. 평소엔 특별한 표시 없이 스며 있다가
+     누르는 순간만 살짝 강조해 "이 화면은 원래 이렇게 조용하다"는 브랜드 톤을 지킨다 */
+  .tts-word { cursor: pointer; border-radius: 4px; }
+  .tts-word:active { background: rgba(232,116,59,.18); }
   .ls-progress { margin: 14px 0 4px; }
   .ls-bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
   .ls-bar > div { height: 100%; background: var(--accent); border-radius: 3px; }
@@ -2690,6 +2694,35 @@ var App = (function () {
     write: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.2"/></svg>'
   };
 
+  // ===== Quick TTS (WBS 3.3) — 본문 단어 터치 시 브라우저 TTS로 즉시 발음 =====
+  /** 단어를 소리 내어 읽는다. 한글/영문을 구분해 알맞은 음성 언어를 고른다. */
+  function speakWord_(word) {
+    if (!('speechSynthesis' in window)) return;
+    var clean = String(word || '').replace(/[^\p{L}\p{N}'-]/gu, '');
+    if (!clean) return;
+    var u = new SpeechSynthesisUtterance(clean);
+    u.lang = /[가-힣]/.test(clean) ? 'ko-KR' : 'en-US';
+    u.rate = 0.9;
+    speechSynthesis.cancel(); // 연속으로 눌러도 겹쳐 재생되지 않게, 이전 발음은 취소하고 새로 재생
+    speechSynthesis.speak(u);
+  }
+  /** 본문 텍스트를 낱말 단위로 탭 가능한 span으로 렌더링(줄바꿈은 유지) */
+  function renderTappableTranscript_(el, text) {
+    el.innerHTML = '';
+    String(text).split('\n').forEach(function (line, li) {
+      if (li > 0) el.appendChild(document.createElement('br'));
+      line.split(/(\s+)/).forEach(function (tok) {
+        if (!tok) return;
+        if (/^\s+$/.test(tok)) { el.appendChild(document.createTextNode(tok)); return; }
+        var span = document.createElement('span');
+        span.className = 'tts-word';
+        span.textContent = tok;
+        span.onclick = function () { speakWord_(tok); };
+        el.appendChild(span);
+      });
+    });
+  }
+
   // ===== S-01 오늘의 숙제 =====
   var ACTION_META = {
     listen: { icon: ICONS.listen, label: '듣기' },
@@ -2895,7 +2928,7 @@ var App = (function () {
     tr.classList.add('hidden');
     Server.call('getListenData', [loadSession().token, c.item_id], function (res) {
       if (res.ok && res.transcript && Rec.item && Rec.item.item_id === c.item_id) {
-        tr.textContent = res.transcript;
+        renderTappableTranscript_(tr, res.transcript);
         tr.classList.remove('hidden');
       }
     }, function () { /* 본문 표시는 부가 기능 — 실패해도 녹음은 진행 */ });
@@ -3117,7 +3150,7 @@ var App = (function () {
     $('ls-count').textContent = d.valid_count;
     $('ls-required').textContent = d.required;
     var tr = $('ls-transcript');
-    if (d.transcript) { tr.textContent = d.transcript; tr.classList.remove('empty'); }
+    if (d.transcript) { renderTappableTranscript_(tr, d.transcript); tr.classList.remove('empty'); }
     else { tr.textContent = '음원을 들으며 따라 읽어보세요'; tr.classList.add('empty'); }
     $('ls-msg').textContent = '';
     $('ls-msg').className = 'ls-msg';
@@ -3284,7 +3317,7 @@ App.init();
 // ===== 빌드 표식 =====
 // 폰이 어떤 셸 버전을 쓰는지 로그인 화면에서 눈으로 확인하기 위한 표식.
 // sw.js의 CACHE_VERSION과 함께 올린다. 폰에 이 값이 안 보이면 구버전 캐시를 쓰는 것.
-var BUILD_VERSION = 'shell-v25';
+var BUILD_VERSION = 'shell-v26';
 (function () {
   var el = document.getElementById('build-stamp');
   if (el) el.textContent = BUILD_VERSION;
