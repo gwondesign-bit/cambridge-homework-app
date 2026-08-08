@@ -801,7 +801,8 @@ var Server = (function () {
     revokeKioskDevice: ['token', 'deviceId'],
     getKioskRoster: ['deviceToken'],
     kioskCheck: ['deviceToken', 'studentId', 'pin', 'attAction'],
-    getAttendanceBoard: ['token', 'dateStr']
+    getAttendanceBoard: ['token', 'dateStr'],
+    getAttendanceSummary: ['token', 'month']
   };
 
   function bodyOf(fn, args) {
@@ -1195,6 +1196,15 @@ var Server = (function () {
       var at = action === 'in' ? '15:30' : '18:00';
       if (action === 'in') { s.state = 'in'; s.in_at = at; } else { s.state = 'out'; s.out_at = at; }
       return { ok: true, name: s.name, action: action, at: at, notified: '미발송(알림톡 준비전)' };
+    },
+    getAttendanceSummary: function () {
+      var rows = this._att.students.map(function (s, i) {
+        return { student_id: s.student_id, name: s.name, group_name: s.group_name,
+                 present_days: [12, 12, 9][i], out_days: [10, 12, 9][i], avg_in: ['14:02','13:55','14:20'][i] };
+      });
+      rows.sort(function (a, b) { return b.present_days - a.present_days; });
+      return { ok: true, month: '2026-08', open_days: 12, rows: rows,
+               note: '반별 수업 요일이 들어오기 전까지는 학생마다 분모가 달라 자동 순위를 매기지 않습니다.' };
     },
     getAttendanceBoard: function () {
       var counts = { none: 0, in: 0, out: 0 };
@@ -2917,7 +2927,7 @@ var MyPage = (function () {
  */
 var Attend = (function () {
   function $(id) { return document.getElementById(id); }
-  var token = null, data = null;
+  var token = null, data = null, summary = null, view = 'today';   // 'today' | 'month'
 
   function open(s) {
     token = s.token;
@@ -2944,9 +2954,89 @@ var Attend = (function () {
     });
   }
 
-  function render() {
+  /** 오늘 현황 ↔ 이번 달 집계 전환 */
+  function tabs() {
+    var row = document.createElement('div');
+    row.className = 'asg-chips';
+    [['today', '오늘'], ['month', '이번 달 집계']].forEach(function (p) {
+      var b = document.createElement('button');
+      b.className = 'asg-chip' + (view === p[0] ? ' on' : '');
+      b.textContent = p[1];
+      b.onclick = function () {
+        if (view === p[0]) return;
+        view = p[0];
+        if (view === 'month' && !summary) loadSummary(); else render();
+      };
+      row.appendChild(b);
+    });
+    return row;
+  }
+
+  function loadSummary() {
+    $('att-body').innerHTML = '<div class="asg-hint">집계 중...</div>';
+    Server.call('getAttendanceSummary', [token, ''], function (res) {
+      if (!res.ok) {
+        if (res.needLogin) { App.logout(); return; }
+        $('att-body').innerHTML = '<div class="asg-hint">집계하지 못했어요.</div>';
+        return;
+      }
+      summary = res;
+      render();
+    });
+  }
+
+  /** 월별 집계 — 출석왕 후보를 눈으로 고르는 화면. 자동으로 1등을 정하지 않는다. */
+  function renderMonth() {
     var box = $('att-body');
     box.innerHTML = '';
+    box.appendChild(tabs());
+
+    var head = document.createElement('div');
+    head.className = 'asg-sec';
+    var t = document.createElement('div');
+    t.className = 'asg-sec-t';
+    t.textContent = summary.month + ' — 수업이 있었던 날 ' + summary.open_days + '일';
+    head.appendChild(t);
+    var n = document.createElement('div');
+    n.className = 'mng-row-s';
+    n.textContent = summary.note;
+    head.appendChild(n);
+    box.appendChild(head);
+
+    var top = (summary.rows[0] || {}).present_days || 0;
+    summary.rows.forEach(function (r) {
+      var card = document.createElement('div');
+      card.className = 'rv-card';
+      var line = document.createElement('div');
+      line.className = 'rv-top';
+      var nm = document.createElement('span');
+      nm.className = 'rv-name';
+      nm.textContent = r.name;
+      line.appendChild(nm);
+      // 최다 출석과 같은 일수면 후보 표시 — "1등"이 아니라 눈에 띄게만 한다
+      if (top > 0 && r.present_days === top) {
+        var bg = document.createElement('span');
+        bg.className = 'rv-badge ok';
+        bg.textContent = '최다';
+        line.appendChild(bg);
+      }
+      card.appendChild(line);
+      var meta = document.createElement('div');
+      meta.className = 'rv-meta';
+      meta.textContent = (r.group_name ? r.group_name + ' · ' : '') +
+        '출석 ' + r.present_days + '일' +
+        (r.avg_in ? (' · 평균 등원 ' + r.avg_in) : '') +
+        (r.out_days ? (' · 하원 기록 ' + r.out_days + '일') : '');
+      card.appendChild(meta);
+      box.appendChild(card);
+    });
+  }
+
+  function render() {
+    if (view === 'month') { renderMonth(); return; }
+    var box = $('att-body');
+    box.innerHTML = '';
+    box.appendChild(tabs());
 
     var head = document.createElement('div');
     head.className = 'asg-sec';
@@ -4032,7 +4122,7 @@ App.init();
 // ===== 빌드 표식 =====
 // 폰이 어떤 셸 버전을 쓰는지 로그인 화면에서 눈으로 확인하기 위한 표식.
 // sw.js의 CACHE_VERSION과 함께 올린다. 폰에 이 값이 안 보이면 구버전 캐시를 쓰는 것.
-var BUILD_VERSION = 'shell-v33';
+var BUILD_VERSION = 'shell-v34';
 (function () {
   var el = document.getElementById('build-stamp');
   if (el) el.textContent = BUILD_VERSION;
