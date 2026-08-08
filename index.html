@@ -224,12 +224,39 @@
   .loading .logo-wipe { width: 84px; height: 84px; margin: 0 auto 16px; }
   .loading .logo-wipe img {
     width: 100%; height: 100%; object-fit: contain;
+    transform-origin: 50% 50%;
     -webkit-mask-image: conic-gradient(black var(--wipe, 0deg), transparent var(--wipe, 0deg));
     mask-image: conic-gradient(black var(--wipe, 0deg), transparent var(--wipe, 0deg));
-    animation: logoWipe .7s cubic-bezier(.3,.6,.3,1) both, logoPulse 1.6s ease-in-out .7s infinite;
+    /* 채우기와 튕김을 같은 주기(2.1s)의 별도 애니메이션으로 겹친다 — 한쪽 타이밍만
+       따로 손볼 수 있어서 리듬을 맞추기 쉽다. */
+    animation: logoWipe 2.1s infinite, logoSpring 2.1s infinite;
   }
-  @keyframes logoWipe { from { --wipe: 0deg; } to { --wipe: 360deg; } }
-  @keyframes logoPulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+  /* 채우기 — "레이백"(박자 뒤에서 버티다 확 따라잡기, 원장 요청 2026-08-08).
+     예전엔 .7s 훑기가 한 번만 돌고(both) 그 뒤로는 opacity만 깜빡여서 기계적으로
+     보였다. 이제 한 주기 안에서 뜸 → 질주 → 머묾 → 리셋이 반복된다.
+     리셋(360°→0°)은 opacity 0 구간에서만 일어나 되감기가 눈에 안 띈다. */
+  @keyframes logoWipe {
+    0%   { --wipe: 0deg; opacity: 0; }
+    /* 뜸 들이기: 다 나타났는데도 아직 안 채워진 채 버틴다 = 박자 뒤로 밀린 느낌 */
+    9%   { --wipe: 0deg; opacity: 1; animation-timing-function: cubic-bezier(.8,.02,.25,1); }
+    /* 질주해서 따라잡기 */
+    50%  { --wipe: 360deg; }
+    /* 다 채운 채로 한 박 머묾 */
+    80%  { --wipe: 360deg; opacity: 1; }
+    93%  { --wipe: 360deg; opacity: 0; }
+    100% { --wipe: 0deg;   opacity: 0; }
+  }
+  /* 튕김 — 채워지는 동안 살짝 눌렸다가, 다 차는 순간 오버슈트 후 잔진동으로 정착 */
+  @keyframes logoSpring {
+    0%, 9% { transform: scale(.93); }
+    42%    { transform: scale(.97); }
+    52%    { transform: scale(1.08); }   /* 착지 — 여기서 탁 */
+    61%    { transform: scale(.985); }
+    70%    { transform: scale(1.022); }
+    78%    { transform: scale(.997); }
+    86%    { transform: scale(1.005); }
+    100%   { transform: scale(.93); }
+  }
   /* 화면 전체가 이 클래스로 요소를 숨긴다(JS가 classList로 토글). !important 가 필요하다:
      뒤에서 정의된 같은 우선순위 규칙(예: .rc-photo { display:block })이 이겨버려
      "hidden 을 붙였는데 안 숨겨지는" 버그가 실제로 났다 — 녹음 화면에서 src 없는
@@ -243,6 +270,12 @@
   .screen-anim { animation: screenIn .38s cubic-bezier(.22,.8,.28,1) both; }
   @media (prefers-reduced-motion: reduce) {
     .screen-anim, .hw-card, .rc-result .big { animation: none !important; }
+    /* 로딩 로고는 애니메이션만 끄면 마스크가 0도로 남아 로고가 통째로 안 보인다.
+       움직임만 없애고 완전히 드러낸 상태로 고정한다. */
+    .loading .logo-wipe img {
+      animation: none !important;
+      --wipe: 360deg; opacity: 1; transform: none;
+    }
   }
   /* 목록 항목은 새로 생성될 때마다 자동으로 살짝 떠오르며 나타난다.
      ⚠ .asg-card(T-01 페이지 다이얼)·.mng-row(T-04 회수 스테퍼)·.rv-card(T-02)는
@@ -3609,7 +3642,7 @@ App.init();
 // ===== 빌드 표식 =====
 // 폰이 어떤 셸 버전을 쓰는지 로그인 화면에서 눈으로 확인하기 위한 표식.
 // sw.js의 CACHE_VERSION과 함께 올린다. 폰에 이 값이 안 보이면 구버전 캐시를 쓰는 것.
-var BUILD_VERSION = 'shell-v31';
+var BUILD_VERSION = 'shell-v32';
 (function () {
   var el = document.getElementById('build-stamp');
   if (el) el.textContent = BUILD_VERSION;
