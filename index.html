@@ -406,6 +406,14 @@
     position: absolute; top: 4px; left: 4px; font-size: 9px; color: #fff;
     background: rgba(0,0,0,.5); border-radius: 6px; padding: 1px 5px; z-index: 1;
   }
+
+  /* 선생님 검사 화면의 학습 확인 사진 — 시각 버튼을 누르면 그 자리에 사진이 뜬다 */
+  .rv-shots { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .rv-shot-btn {
+    font-size: 12px; padding: 4px 10px; border-radius: 8px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--surface); color: var(--text);
+  }
+  .rv-shot-img { width: 120px; border-radius: 8px; display: block; }
 </style>
 </head>
 <body>
@@ -646,7 +654,7 @@
 
   <!-- 거울 모드: 듣기·녹음 시 자동으로 켜지는, 저장하지 않는 카메라 프리뷰 (5.4) -->
   <div id="mirror-preview" class="mirror-preview hidden">
-    <span class="mirror-badge">학습모드</span>
+    <span id="mirror-note" class="mirror-badge">학습모드</span>
     <video id="mirror-video" autoplay muted playsinline></video>
   </div>
 </div>
@@ -693,7 +701,10 @@ var Server = (function () {
     getSubmissionAudio: ['token', 'submissionId'],
     getSubmissionHistory: ['token', 'itemId'],
     reviewSubmission: ['token', 'submissionId', 'reviewAction', 'comment'],
-    exemptItem: ['token', 'itemId', 'comment']
+    exemptItem: ['token', 'itemId', 'comment'],
+    submitStudyPhoto: ['token', 'itemId', 'base64', 'mimeType'],
+    getStudyPhotos: ['token', 'itemId'],
+    getStudyPhoto: ['token', 'photoId']
   };
 
   function bodyOf(fn, args) {
@@ -941,7 +952,14 @@ var Server = (function () {
         else { found.overrides[f] = patch[f]; found[f] = patch[f]; }
       });
       if (patch.level) found.level = patch.level;
-      return { ok: true, student_id: studentId, counts: found, overrides: found.overrides };
+      if (Object.prototype.hasOwnProperty.call(patch, 'photo_consent')) {
+        found.photo_consent = !!patch.photo_consent;
+        found.photo_consent_at = found.photo_consent ? '2026-08-08' : '';
+      }
+      return {
+        ok: true, student_id: studentId, counts: found, overrides: found.overrides,
+        photo_consent: !!found.photo_consent, photo_consent_at: found.photo_consent_at || ''
+      };
     },
     assignStudentsToGroup: function (token, groupId, studentIds) {
       var m = this._mng;
@@ -1048,6 +1066,11 @@ var Server = (function () {
       if (comment) r.comment = '[면제] ' + comment;
       return { ok: true, item_id: itemId };
     },
+    // 학습 확인 사진 — mock에서는 저장하는 척만 한다(카메라·드라이브가 없으므로).
+    // 개발 브라우저는 실제 카메라를 못 잡으니 이 경로의 최종 확인은 실기기에서만 가능하다.
+    submitStudyPhoto: function () { return { ok: true, saved: true }; },
+    getStudyPhotos: function () { return { ok: true, photos: [] }; },
+    getStudyPhoto: function () { return { ok: false, message: 'mock에는 사진이 없어요.' }; },
     // 변경분 일괄 저장 — 서버와 같은 순서(반 설정 → 교재 → 이동 → 학생)로 적용
     saveManageBatch: function (token, changes) {
       var self = this;
@@ -1102,18 +1125,36 @@ var Server = (function () {
 
 // ===== 거울 모드 (설계결정문서 5.4) — 독립 모듈 =====
 // 듣기·녹음 화면에 들어가면 자동으로 켜지고, 화면을 떠나면 즉시 완전히 꺼진다.
-// 동의를 묻지 않는다(학생이 스스로 켤 이유가 없으므로). 저장하지 않으며 "저장 안 됨"을 프리뷰에 상시 표시.
-// 카메라를 못 켜거나 거부해도 학습에는 지장이 없으므로 조용히 넘어간다.
+// 동의를 묻지 않는다(학생이 스스로 켤 이유가 없으므로). 카메라를 못 켜거나 거부해도
+// 학습에는 지장이 없으므로 조용히 넘어간다.
+//
+// ▣ 학습 확인 캡처 (2026-08-08 원장 확정)
+//   듣기를 하는 **도중** 무작위 시점에 2~3장을 조용히 찍어 서버로 올린다.
+//   제출 순간에 찍으면 이미 늦다 — 듣는 내내 언제 찍힐지 모르게 해야 딴짓을 안 한다.
+//   찍히는 순간 연출은 하지 않는다(원장 선택). 대신 화면 진입 시 "사진이 찍혀요"를
+//   프리뷰에 상시 표시해, 몰래 찍는 게 아니라는 점은 분명히 한다.
+//
+//   ⚠ 보호자 동의(Students.photo_consent)가 기록된 학생만 찍는다. 동의 정보는
+//   대시보드 응답의 photo_consent로 내려오며, 없으면 캡처를 아예 시작하지 않는다
+//   (서버도 저장 직전에 한 번 더 막는다 — 이중 방어).
 var Mirror = (function () {
   var stream = null;
   var wanted = false; // 지금 학습화면에 있어 켜져 있어야 하는가 (getUserMedia 비동기 경쟁 방지용)
+  var timers = [];    // 예약된 무작위 캡처 타이머 — 화면을 떠나면 전부 취소한다
+  var capture = null; // { itemId } — 캡처를 켤 항목. null이면 프리뷰만(동의 없음·녹음 화면 등)
   function $(id) { return document.getElementById(id); }
 
-  // 듣기/녹음 화면 진입 → 자동 켜기
-  function enter() {
+  /**
+   * 듣기/녹음 화면 진입 → 카메라 자동 켜기.
+   * @param opts {itemId, token} 을 주면 그 항목에 대해 무작위 캡처까지 켠다. 없으면 프리뷰만.
+   *   (Mirror는 App 바깥의 독립 모듈이라 세션을 직접 못 읽는다 — 토큰을 넘겨받는다.)
+   */
+  function enter(opts) {
     wanted = true;
+    capture = (opts && opts.itemId && opts.token) ? { itemId: opts.itemId, token: opts.token } : null;
+    $('mirror-note').textContent = capture ? '사진이 찍혀요' : '학습모드';
     if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) return;
-    if (stream) { showPreview(); return; }
+    if (stream) { showPreview(); scheduleCaptures(); return; }
     navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false })
       .then(function (s) {
         // 스트림이 준비되기 전에 화면을 떠났으면 바로 정리 (카메라가 켜진 채 남지 않도록)
@@ -1121,13 +1162,70 @@ var Mirror = (function () {
         stream = s;
         $('mirror-video').srcObject = s;
         showPreview();
+        scheduleCaptures();
       })
       .catch(function () { /* 카메라 거부/불가 — 무시 */ });
   }
   function showPreview() { if (stream) $('mirror-preview').classList.remove('hidden'); }
+
+  /**
+   * 무작위 시점 2~3장을 예약한다.
+   * 15초~3분 사이에 흩어 놓되 서로 최소 20초는 벌린다 — 연달아 찍히면 무작위가 아니라
+   * 고장처럼 보이고, 같은 장면만 두 장 남는다. 듣기가 짧게 끝나면 남은 타이머는
+   * stop()에서 취소되므로 실제 촬영 수는 2~3장 "이하"가 된다.
+   */
+  function scheduleCaptures() {
+    clearTimers();
+    if (!capture) return;
+    var count = 2 + Math.floor(Math.random() * 2); // 2 또는 3
+    var at = [];
+    for (var i = 0; i < count; i++) {
+      for (var tryN = 0; tryN < 12; tryN++) {
+        var t = 15000 + Math.floor(Math.random() * 165000); // 15초 ~ 3분
+        var tooClose = at.some(function (x) { return Math.abs(x - t) < 20000; });
+        if (!tooClose) { at.push(t); break; }
+      }
+    }
+    at.forEach(function (t) { timers.push(setTimeout(shoot, t)); });
+  }
+  function clearTimers() {
+    timers.forEach(function (t) { clearTimeout(t); });
+    timers = [];
+  }
+
+  /** 지금 화면의 한 프레임을 JPEG로 만들어 올린다. 실패해도 학습을 방해하지 않는다. */
+  function shoot() {
+    if (!stream || !capture) return;
+    try {
+      var v = $('mirror-video');
+      if (!v || !v.videoWidth) return; // 아직 첫 프레임 전 — 이번 차례는 건너뛴다
+      // 얼굴 확인 용도라 원본 해상도가 필요 없다. 가로 480px로 줄여 업로드를 가볍게.
+      var w = 480, h = Math.round(v.videoHeight * (480 / v.videoWidth));
+      var canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      // 프리뷰는 거울처럼 좌우 반전해 보여주지만(scaleX(-1)), 저장본은 반전하지 않는다 —
+      // 선생님이 볼 땐 실제 모습 그대로여야 한다.
+      canvas.getContext('2d').drawImage(v, 0, 0, w, h);
+      canvas.toBlob(function (blob) {
+        if (!blob) return;
+        var reader = new FileReader();
+        reader.onloadend = function () {
+          var b64 = String(reader.result || '').split(',')[1];
+          if (!b64 || !capture) return;   // 업로드 직전에 화면을 떠났으면 보내지 않는다
+          // 응답은 신경 쓰지 않는다 — 사진은 부가 기능이라 실패해도 조용히 넘어간다.
+          Server.call('submitStudyPhoto', [capture.token, capture.itemId, b64, 'image/jpeg'], function () {});
+        };
+        reader.readAsDataURL(blob);
+      }, 'image/jpeg', 0.7);
+    } catch (e) { /* 캡처 실패 — 학습에 지장 없으므로 무시 */ }
+  }
+
   // 학습화면 이탈·로그아웃 → 카메라 완전 종료 (프리뷰만 숨기는 게 아니라 스트림을 끈다)
+  // 예약된 캡처 타이머도 여기서 전부 취소한다 — 화면을 떠난 뒤에 찍히면 안 된다.
   function stop() {
     wanted = false;
+    capture = null;
+    clearTimers();
     if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
     var v = $('mirror-video'); if (v) v.srcObject = null;
     $('mirror-preview').classList.add('hidden');
@@ -1391,6 +1489,44 @@ var Review = (function () {
       p.insertBefore(el, p.firstChild);
     });
 
+    // 학습 확인 사진 — 듣기 중 무작위로 찍힌 사진(보호자 동의한 학생만 있음).
+    // 기본 2일 후 자동 삭제되므로, 지난 날짜 항목에는 아무것도 안 나오는 게 정상이다.
+    // 목록은 메타데이터만 받고, 실제 이미지는 누를 때 한 장씩 받는다(응답을 가볍게).
+    var shots = document.createElement('div');
+    shots.className = 'rv-hist';
+    p.appendChild(shots);
+    Server.call('getStudyPhotos', [token, r.item_id], function (res) {
+      if (!res.ok || !res.photos || !res.photos.length) { shots.remove(); return; }
+      shots.innerHTML = '';
+      var title = document.createElement('div');
+      title.className = 'rv-meta';
+      title.textContent = '📸 학습 확인 사진 ' + res.photos.length + '장 (듣는 중 무작위 촬영 · 2일 후 자동 삭제)';
+      shots.appendChild(title);
+
+      var strip = document.createElement('div');
+      strip.className = 'rv-shots';
+      shots.appendChild(strip);
+      res.photos.forEach(function (ph) {
+        var btn = document.createElement('button');
+        btn.className = 'rv-shot-btn';
+        btn.textContent = String(ph.captured_at).slice(11, 16) || '보기';
+        btn.onclick = function () {
+          if (btn.dataset.loaded) return;
+          btn.dataset.loaded = '1';
+          btn.textContent = '...';
+          Server.call('getStudyPhoto', [token, ph.photo_id], function (r2) {
+            if (!r2.ok) { btn.textContent = r2.message || '없음'; return; }
+            var img = document.createElement('img');
+            img.className = 'rv-shot-img';
+            img.alt = r.student_name + ' 학습 확인 사진';
+            img.src = 'data:' + (r2.mimeType || 'image/jpeg') + ';base64,' + r2.base64;
+            btn.parentNode.replaceChild(img, btn);
+          });
+        };
+        strip.appendChild(btn);
+      });
+    });
+
     // 회차 이력(2회 이상일 때만)
     if (r.attempts > 1) {
       var hist = document.createElement('div');
@@ -1485,6 +1621,12 @@ var Manage = (function () {
   }
 
   // ---- 화면에 보여줄 "지금 값" = 원본에 draft를 얹은 것 ----
+  /** 사진 동의: 아직 저장 안 한 변경이 있으면 그 값, 없으면 서버가 준 값 */
+  function draftConsent(st) {
+    var d = draft.students[st.student_id];
+    if (d && d.photo_consent !== undefined) return !!d.photo_consent;
+    return !!st.photo_consent;
+  }
   function effLevel(g) { return draft.level || g.level; }
   function effDefault(g, f) {
     return draft.defaults[f] !== undefined ? draft.defaults[f] : g.defaults[f];
@@ -1641,6 +1783,11 @@ var Manage = (function () {
       var name = st ? st.name : sid;
       Object.keys(draft.students[sid]).forEach(function (f) {
         var v = draft.students[sid][f];
+        // 사진 동의는 회수가 아니라 예/아니오 값이라 따로 적는다("→ true회"로 나오면 안 됨)
+        if (f === 'photo_consent') {
+          out.push(name + ' 학습 확인 사진 촬영 → ' + (v ? '동의함(보호자)' : '동의 없음'));
+          return;
+        }
         out.push(name + ' ' + labelOf(f) + ' → ' + (v === null ? '반 기본값' : v + '회'));
       });
     });
@@ -1946,13 +2093,43 @@ var Manage = (function () {
       }, !!(d && d[c.field] !== undefined)));
     });
 
+    // 학습 확인 사진 — 보호자 동의 기록 칸.
+    // 아이가 앱에서 체크하는 게 아니라, 보호자에게 받은 동의를 원장이 여기 옮겨 적는다
+    // (미성년자 본인 동의는 법적 효력이 약함 — 2026-08-08 확정).
+    var consentOn = draftConsent(st);
+    var cs = document.createElement('div');
+    cs.className = 'mng-note';
+    cs.style.marginTop = '8px';
+    var cb = document.createElement('button');
+    cb.className = 'mng-btn' + (consentOn ? ' on' : '');
+    cb.textContent = (consentOn ? '☑' : '☐') + ' 학습 확인 사진 촬영 동의(보호자)';
+    cb.onclick = function () {
+      // 회수 수정과 같은 흐름 — draft에 얹고 다시 그린다(저장은 아래 저장 바에서 한 번에)
+      if (!draft.students[st.student_id]) draft.students[st.student_id] = {};
+      draft.students[st.student_id].photo_consent = !consentOn;
+      render();
+    };
+    cs.appendChild(cb);
+    var cnote = document.createElement('div');
+    cnote.className = 'mng-row-s';
+    cnote.style.marginTop = '4px';
+    cnote.textContent = consentOn
+      ? '듣기 중 무작위로 사진이 찍혀요 · 2일 후 자동 삭제 · 학원만 열람' +
+        (st.photo_consent_at ? (' (기록 ' + st.photo_consent_at + ')') : '')
+      : '동의 없음 — 이 학생은 사진을 찍지 않아요';
+    cs.appendChild(cnote);
+    box.appendChild(cs);
+
     if (Object.keys(effOverrides(g, st)).length) {
       var reset = document.createElement('button');
       reset.className = 'mng-btn';
       reset.style.width = '100%';
       reset.textContent = '전부 반 기본값으로 되돌리기';
       reset.onclick = function () {
+        // 회수만 되돌린다 — 사진 동의는 성격이 다른 값이라 같이 지워지면 안 된다
+        var keep = draft.students[st.student_id] || {};
         draft.students[st.student_id] = { voca_count: null, read_count: null, pattern_count: null };
+        if (keep.photo_consent !== undefined) draft.students[st.student_id].photo_consent = keep.photo_consent;
         render();
       };
       box.appendChild(reset);
@@ -2572,6 +2749,9 @@ var App = (function () {
   var SESSION_KEY = 'cambridge_session';
   var bootstrap = null;
   var selGroup = null, selStudent = null;
+  // 학습 확인 사진 촬영 가능 여부 — 대시보드 응답(보호자 동의 기록)에서 채운다.
+  // 기본 false: 동의를 확인하기 전에는 절대 찍지 않는다.
+  var photoConsent = false;
   var pinBuffer = '', pinMode = 'student'; // 'student' | 'teacher'
 
   function $(id) { return document.getElementById(id); }
@@ -2591,8 +2771,14 @@ var App = (function () {
     // 거울 모드는 듣기·녹음에서만. 사진 제출은 뒷면 카메라로 공책을 찍는 화면이라
     // 전면 카메라를 잡고 있으면 기기에 따라 촬영이 막힌다.
     var photoMode = (id === 'screen-record' && Rec && Rec.mode === 'photo');
-    if ((id === 'screen-listen' || id === 'screen-record') && !photoMode) Mirror.enter();
-    else Mirror.stop();
+    if ((id === 'screen-listen' || id === 'screen-record') && !photoMode) {
+      // 학습 확인 캡처는 **듣기 화면에서만** 켠다(원장 확정 2026-08-08 — "듣는 와중에").
+      // 녹음 화면은 프리뷰만: 소리내어 읽는 중이라 어차피 화면을 보고 있고,
+      // 녹음 제출물 자체가 확인 자료가 되므로 사진까지 남길 이유가 없다.
+      var s = loadSession();
+      var canCapture = (id === 'screen-listen') && photoConsent && Listen && Listen.itemId && s && s.token;
+      Mirror.enter(canCapture ? { itemId: Listen.itemId, token: s.token } : null);
+    } else Mirror.stop();
   }
   function saveSession(s) { localStorage.setItem(SESSION_KEY, JSON.stringify(s)); }
   function loadSession() {
@@ -2777,6 +2963,8 @@ var App = (function () {
   }
 
   function renderDashboard(sess, d) {
+    // 보호자 동의가 기록된 학생만 학습 확인 사진을 찍는다(서버가 내려주는 값 그대로 따른다)
+    photoConsent = !!d.photo_consent;
     var dt = new Date(d.today + 'T00:00:00');
     var days = ['일', '월', '화', '수', '목', '금', '토'];
     $('dash-date').textContent = (dt.getMonth() + 1) + '월 ' + dt.getDate() + '일 ' + days[dt.getDay()] + '요일';
@@ -3386,7 +3574,7 @@ App.init();
 // ===== 빌드 표식 =====
 // 폰이 어떤 셸 버전을 쓰는지 로그인 화면에서 눈으로 확인하기 위한 표식.
 // sw.js의 CACHE_VERSION과 함께 올린다. 폰에 이 값이 안 보이면 구버전 캐시를 쓰는 것.
-var BUILD_VERSION = 'shell-v28';
+var BUILD_VERSION = 'shell-v29';
 (function () {
   var el = document.getElementById('build-stamp');
   if (el) el.textContent = BUILD_VERSION;
