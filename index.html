@@ -405,6 +405,11 @@
   /* ===== Voca 구간 학습 (S-02V) ===== */
   .hw-card.locked { opacity: .55; }
   .hw-card.locked:active { transform: none; }
+  .asg-voca-list { margin: 8px 0 2px; display: flex; flex-direction: column; gap: 4px; }
+  .asg-voca-row { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; color: var(--ink); padding: 5px 8px; border-radius: 8px; background: var(--neutral-bg); }
+  .asg-voca-row.blocked { color: var(--danger); }
+  .asg-voca-name { font-weight: 700; flex-shrink: 0; }
+  .asg-auto.warn { color: var(--danger); font-weight: 700; }
   .vc-dots { display: flex; gap: 6px; justify-content: center; margin: 10px 0 14px; flex-wrap: wrap; }
   .vc-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--neutral-bg); flex-shrink: 0; }
   .vc-dot.done { background: var(--good); }
@@ -1025,7 +1030,7 @@ var Server = (function () {
     getAssignBootstrap: function (token, groupId, weekday) {
       var wd = weekday || ['일','월','화','수','목','금','토'][new Date().getDay()];
       var base = { ok: true, weekday: wd, date: '2026-07-27', groups: [
-        { group_id: 'G-A', group_name: 'A반', level: 'Lv3', level_band: 'Lv1plus', student_count: 2 },
+        { group_id: 'G-A', group_name: 'A반', level: 'Lv3', default_voca_span: 4, level_band: 'Lv1plus', student_count: 2 },
         { group_id: 'G-B', group_name: 'B반', level: 'Lv1', level_band: 'Lv1plus', student_count: 1 }
       ] };
       if (!groupId) return base;
@@ -1054,9 +1059,14 @@ var Server = (function () {
         { book_id: 'LS-01-WB', subject: '리스닝', book_type: 'WB', series: 'Bricks Listening', label: '50-1', seq: 1, title: '', total_pages: 40 }
       ];
       base.progress = { '리딩|SB': { subject: '리딩', book_type: 'SB', book_id: 'RD-01-SB', series: 'Bricks Reading', label: '30-1', current_page: 12, next_page: 13, total_pages: 60 } };
+      // Voca는 개인 진도 — 학생마다 교재·유닛·범위가 다르다
       base.students = [
-        { student_id: 'S001', name: '김철수', voca_count: 3, read_count: 1, pattern_count: 0 },
-        { student_id: 'S002', name: '이영희', voca_count: 1, read_count: 2, pattern_count: 3 }
+        { student_id: 'S001', name: '김철수', voca_count: 3, read_count: 1, pattern_count: 0,
+          voca: { label: 'Bricks 1500 Unit 12', from: 9, to: 14, max_seq: 23 } },
+        { student_id: 'S002', name: '이영희', voca_count: 1, read_count: 2, pattern_count: 3,
+          voca: { label: 'Bricks 900 Unit 03', from: 16, to: 19, max_seq: 23 } },
+        { student_id: 'S003', name: '박민수', voca_count: 1, read_count: 1, pattern_count: 0,
+          voca: { blocked: '교재 미지정' } }
       ];
       // 기사는 반 레벨의 것만(코드 x-x: 앞자리=레벨, 뒷자리=그 주 순번)
       base.contents = [{ content_id: 'C-ART-002', subject: '기사', title: 'Boy Climbs Huge Rock',
@@ -1071,25 +1081,34 @@ var Server = (function () {
         { content_unit_id: 'CU-VOCA-BRICKS900-U02', label: 'Bricks 900 Unit 02', max_seq: 23 },
         { content_unit_id: 'CU-VOCA-BRICKS900-U03', label: 'Bricks 900 Unit 03', max_seq: 23 }
       ];
-      base.voca_progress = { content_unit_id: 'CU-VOCA-BRICKS900-U01', next_seq: 5 };
+
       base.voca_blank_mode = false;
       return base;
     },
     // ---- 원생 관리(T-04) mock. 저장은 메모리에만 반영해 화면 흐름을 확인한다 ----
     _mng: {
       levels: ['Phonics', 'Lv0', 'Lv1', 'Lv2', 'Lv3', 'Lv4'],
+      voca_units: [
+        { content_unit_id: 'CU-VOCA-BRICKS900-U01', label: 'Bricks 900 Unit 01', max_seq: 24 },
+        { content_unit_id: 'CU-VOCA-BRICKS900-U02', label: 'Bricks 900 Unit 02', max_seq: 23 },
+        { content_unit_id: 'CU-VOCA-BRICKS900-U03', label: 'Bricks 900 Unit 03', max_seq: 23 },
+        { content_unit_id: 'CU-VOCA-BRICKS1500-U12', label: 'Bricks 1500 Unit 12', max_seq: 23 }
+      ],
       groups: [
-        { group_id: 'G-A', group_name: 'A반', level: 'Lv3',
+        { group_id: 'G-A', group_name: 'A반', level: 'Lv3', default_voca_span: 4,
           defaults: { voca_count: 1, read_count: 1, pattern_count: 0 },
           settings: { '리딩': { book_seq: 6, sb_page: 12, wb_page: 8 }, '그래머': { book_seq: 3, sb_page: 0, wb_page: 0 } },
           students: [
-            { student_id: 'S001', name: '김철수', group_id: 'G-A', level: 'Lv3', voca_count: 3, read_count: 1, pattern_count: 0, overrides: { voca_count: 3 } },
-            { student_id: 'S002', name: '이영희', group_id: 'G-A', level: 'Lv3', voca_count: 1, read_count: 1, pattern_count: 0, overrides: {} }
+            { student_id: 'S001', name: '김철수', group_id: 'G-A', level: 'Lv3', voca_count: 3, read_count: 1, pattern_count: 0, overrides: { voca_count: 3 },
+              voca_unit_id: 'CU-VOCA-BRICKS1500-U12', voca_seq: 8, voca_span: 6 },
+            { student_id: 'S002', name: '이영희', group_id: 'G-A', level: 'Lv3', voca_count: 1, read_count: 1, pattern_count: 0, overrides: {},
+              voca_unit_id: 'CU-VOCA-BRICKS900-U03', voca_seq: 15, voca_span: null }
           ] },
         { group_id: 'G-B', group_name: 'B반', level: 'Lv1',
           defaults: { voca_count: 1, read_count: 1, pattern_count: 0 },
           settings: {},
-          students: [ { student_id: 'S003', name: '박민수', group_id: 'G-B', level: 'Lv1', voca_count: 1, read_count: 1, pattern_count: 0, overrides: {} } ] }
+          students: [ { student_id: 'S003', name: '박민수', group_id: 'G-B', level: 'Lv1', voca_count: 1, read_count: 1, pattern_count: 0, overrides: {},
+            voca_unit_id: '', voca_seq: 0, voca_span: null } ] }
       ],
       unassigned: [ { student_id: 'S004', name: '최지우', group_id: '', level: '', voca_count: 1, read_count: 1, pattern_count: 0, overrides: {} } ],
       books: {
@@ -1106,7 +1125,7 @@ var Server = (function () {
     },
     getManageData: function () {
       var m = this._mng;
-      return { ok: true, levels: m.levels, groups: m.groups, books: m.books, unassigned: m.unassigned };
+      return { ok: true, levels: m.levels, groups: m.groups, books: m.books, unassigned: m.unassigned, voca_units: m.voca_units };
     },
     saveGroupSettings: function (token, groupId, patch) {
       // 빈칸 모드는 mock 메모리에도 반영해 화면 흐름을 확인할 수 있게 한다
@@ -2282,7 +2301,11 @@ var Manage = (function () {
     return sec;
   }
 
-  function stepper(label, value, onChange, changed) {
+  // opts = { unit: '회'|'번'|'문장', max: 9 } — Voca 문장 번호는 24까지 가므로 최대치를 열어둔다
+  function stepper(label, value, onChange, changed, opts) {
+    opts = opts || {};
+    var unit = opts.unit || '회';
+    var max = opts.max === undefined ? 9 : opts.max;
     var row = document.createElement('div');
     row.className = 'mng-cnt';
     var l = document.createElement('div');
@@ -2296,10 +2319,10 @@ var Manage = (function () {
     var box = document.createElement('div');
     box.className = 'mng-step';
     var minus = document.createElement('button'); minus.textContent = '−';
-    var val = document.createElement('span'); val.textContent = value + '회';
+    var val = document.createElement('span'); val.textContent = value + unit;
     var plus = document.createElement('button'); plus.textContent = '+';
     minus.onclick = function () { if (value > 0) onChange(value - 1); };
-    plus.onclick = function () { if (value < 9) onChange(value + 1); };
+    plus.onclick = function () { if (value < max) onChange(value + 1); };
     box.appendChild(minus); box.appendChild(val); box.appendChild(plus);
     row.appendChild(l); row.appendChild(box);
     return row;
@@ -2348,6 +2371,81 @@ var Manage = (function () {
     sec.appendChild(add);
     if (picking) sec.appendChild(studentPicker(g));
     return sec;
+  }
+
+  /** 학생 카드의 Voca 진도 설정 — 교재·유닛 / 마지막 문장 / 한 번에 몇 문장 */
+  function vocaStudentBox(st, g) {
+    var d = draft.students[st.student_id] || {};
+    var cur = d.voca_unit_id !== undefined ? d.voca_unit_id : st.voca_unit_id;
+    var seq = d.voca_seq !== undefined ? d.voca_seq : (st.voca_seq || 0);
+    var span = d.voca_span !== undefined ? d.voca_span : st.voca_span;   // null = 반 기본값
+    var units = data.voca_units || [];
+
+    var wrap = document.createElement('div');
+    wrap.className = 'mng-note';
+    wrap.style.marginTop = '10px';
+
+    var head = document.createElement('div');
+    head.className = 'mng-row-t';
+    head.textContent = 'Voca 진도 (개인별)';
+    wrap.appendChild(head);
+
+    if (!units.length) {
+      wrap.appendChild(hint('구간표가 아직 없어요. 교재를 먼저 넣어주세요.'));
+      return wrap;
+    }
+
+    var patch = function (f, v) {
+      if (!draft.students[st.student_id]) draft.students[st.student_id] = {};
+      draft.students[st.student_id][f] = v;
+      render();
+    };
+
+    var sel = document.createElement('select');
+    sel.className = 'asg-book';
+    var none = document.createElement('option');
+    none.value = ''; none.textContent = '— 교재·유닛 선택 —';
+    sel.appendChild(none);
+    units.forEach(function (u) {
+      var o = document.createElement('option');
+      o.value = u.content_unit_id;
+      o.textContent = u.label + ' (' + u.max_seq + '문장)';
+      if (u.content_unit_id === cur) o.selected = true;
+      sel.appendChild(o);
+    });
+    sel.onchange = function () {
+      patch('voca_unit_id', sel.value);
+      patch('voca_seq', 0);   // 유닛을 바꾸면 1번부터 — 앞 유닛 번호를 물고 가면 엉뚱한 범위가 나간다
+    };
+    wrap.appendChild(sel);
+
+    var u = units.filter(function (x) { return x.content_unit_id === cur; })[0];
+    wrap.appendChild(stepper('마지막으로 한 문장', seq, function (next) {
+      patch('voca_seq', Math.max(0, Math.min(next, u ? u.max_seq : 99)));
+    }, d.voca_seq !== undefined, { unit: '번', max: u ? u.max_seq : 30 }));
+    wrap.appendChild(stepper('한 번에 나갈 문장', span === null || span === undefined ? effSpan(g) : span,
+      function (next) { patch('voca_span', next === effSpan(g) ? null : next); },
+      d.voca_span !== undefined, { unit: '문장', max: 20 }));
+
+    var nx = document.createElement('div');
+    nx.className = 'mng-row-s';
+    nx.style.marginTop = '4px';
+    if (!cur) nx.textContent = '교재를 지정해야 Voca 숙제가 나갑니다.';
+    else {
+      var sp = (span === null || span === undefined) ? effSpan(g) : span;
+      var from = seq + 1;
+      nx.textContent = (u && from > u.max_seq)
+        ? '이 유닛을 끝냈어요 — 다음 배부 때 다음 유닛 1번부터 나갑니다.'
+        : ('다음 배부: ' + from + '~' + Math.min(from + sp - 1, u ? u.max_seq : from) + '번');
+    }
+    wrap.appendChild(nx);
+    return wrap;
+  }
+
+  /** 반 기본 분량(한 번에 나갈 문장 수) */
+  function effSpan(g) {
+    if (draft.defaults.voca_span !== undefined) return draft.defaults.voca_span;
+    return g.default_voca_span || 4;
   }
 
   function labelOf(field) {
@@ -2411,6 +2509,11 @@ var Manage = (function () {
         setStudentCount(g, st, c.field, next);
       }, !!(d && d[c.field] !== undefined)));
     });
+
+    // ---- Voca 개인 진도 ----
+    // Voca는 반이 아니라 개인을 따라간다(2026-08-10 확정). 어휘 습득력에 따라
+    // 같은 반에서도 교재부터 갈리므로 여기서 학생마다 정한다.
+    box.appendChild(vocaStudentBox(st, g));
 
     // 학습 확인 사진 — 보호자 동의 기록 칸.
     // 아이가 앱에서 체크하는 게 아니라, 보호자에게 받은 동의를 원장이 여기 옮겨 적는다
@@ -2648,26 +2751,6 @@ var Assign = (function () {
             count_field: COUNT_FIELD[action] || '',
             content_unit_id: '', required_listens: action === 'article_word' ? 1 : 0
           };
-          // Voca는 유닛·문장 범위를 진도에서 이어받는다(교재 페이지와 같은 방식)
-          if (action === 'voca_record') {
-            var vus = plan.voca_units || [];
-            var vp = plan.voca_progress || {};
-            var cur = vus.filter(function (x) { return x.content_unit_id === vp.content_unit_id; })[0];
-            var pick = cur || vus[0];
-            if (pick) {
-              // 지난 유닛을 다 끝냈으면 다음 유닛 1번부터
-              var start = cur ? (vp.next_seq || 1) : 1;
-              if (cur && start > cur.max_seq) {
-                var at = vus.indexOf(cur);
-                pick = vus[at + 1] || cur;
-                start = 1;
-              }
-              r.content_unit_id = pick.content_unit_id;
-              r.voca_max = pick.max_seq;
-              r.segment_from = Math.min(start, pick.max_seq);
-              r.segment_to = Math.min(r.segment_from + 3, pick.max_seq);
-            }
-          }
           rows.push(r);
         }
       });
@@ -2782,9 +2865,9 @@ var Assign = (function () {
       body.appendChild(contentSelect(row));
     }
 
-    // 2-b) Voca: 유닛 + 문장 범위. 학생이 숙제 개수를 문장으로 세므로 범위가 곧 분량이다.
+    // 2-b) Voca: 개인 진도라 범위를 고르지 않는다 — 누가 어디를 받는지 보여주기만 한다
     if (row.action === 'voca_record' && !row.custom) {
-      body.appendChild(vocaPicker(row));
+      body.appendChild(vocaPreview());
     }
 
     // 3) 학생별 회수로 늘어나는 행: 여기서 묻지 않고 안내만
@@ -2792,7 +2875,7 @@ var Assign = (function () {
       var a = document.createElement('div');
       a.className = 'asg-auto';
       a.innerHTML = '학생별 회수 자동 — ' + countSummary(row.count_field);
-      if (row.action === 'voca_record' && row.content_unit_id) {
+      if (row.action === 'voca_record') {
         a.innerHTML += ' · 회수마다 <b>듣기+녹음 한 쌍</b>이 생겨요';
       }
       body.appendChild(a);
@@ -2812,86 +2895,48 @@ var Assign = (function () {
   }
 
   /**
-   * Voca 유닛 + 문장 범위 선택.
-   * 교재 페이지와 같은 "진도 이어받기" 방식 — 지난번 끝난 다음 문장부터 시작값을 잡는다.
-   * 범위가 곧 학생이 세는 숙제 개수라 3~4개가 기본이다.
+   * Voca는 반이 아니라 개인 진도를 따라간다(2026-08-10 확정).
+   * 어휘 습득력에 따라 같은 반에서도 교재부터 갈리므로 범위를 반 단위로 고를 수 없다.
+   * 배부 화면은 고르는 자리가 아니라 **누가 어디를 받는지 확인하는 자리**다.
+   * 개별 조정은 원생 관리 화면에서 한다.
    */
-  function vocaPicker(row) {
+  function vocaPreview() {
     var wrap = document.createElement('div');
-    var units = plan.voca_units || [];
-    if (!units.length) {
-      var none = document.createElement('div');
-      none.className = 'asg-auto';
-      none.textContent = 'Voca 구간표가 아직 없어요 — 구간표를 먼저 넣어주세요(음원 없이는 녹음만 나갑니다).';
-      wrap.appendChild(none);
-      return wrap;
-    }
+    var list = (plan.students || []);
+    var blocked = list.filter(function (s) { return s.voca && s.voca.blocked; });
 
-    var sel = document.createElement('select');
-    sel.className = 'asg-book';
-    units.forEach(function (u) {
-      var o = document.createElement('option');
-      o.value = u.content_unit_id;
-      o.textContent = u.label + ' (' + u.max_seq + '문장)';
-      if (u.content_unit_id === row.content_unit_id) o.selected = true;
-      sel.appendChild(o);
-    });
-    sel.onchange = function () {
-      row.content_unit_id = sel.value;
-      var u = units.filter(function (x) { return x.content_unit_id === sel.value; })[0];
-      row.voca_max = u ? u.max_seq : 0;
-      // 유닛을 바꾸면 1번부터 — 앞 유닛의 번호를 이어받으면 엉뚱한 범위가 나간다
-      row.segment_from = 1;
-      row.segment_to = Math.min(row.voca_max, 4);
-      renderPlan(); updateSummary();
-    };
-    wrap.appendChild(sel);
-
-    var line = document.createElement('div');
-    line.className = 'asg-dial-l';
-    var lbl = document.createElement('span'); lbl.textContent = '문장 범위';
-    var val = document.createElement('b');
-    line.appendChild(lbl); line.appendChild(val);
-    wrap.appendChild(line);
+    var note = document.createElement('div');
+    note.className = 'asg-auto';
+    note.innerHTML = '학생별 진도 자동 — 각자 자기 유닛의 다음 범위가 나갑니다.';
+    wrap.appendChild(note);
 
     var box = document.createElement('div');
-    box.className = 'asg-dial';
-    var max = row.voca_max || 0;
-    var paint = function () {
-      val.textContent = row.segment_from + '~' + row.segment_to + '번 (' +
-        Math.max(0, row.segment_to - row.segment_from + 1) + '개)';
-      box.querySelectorAll('button').forEach(function (b) {
-        var n = Number(b.dataset.n);
-        b.className = (n === row.segment_from || n === row.segment_to) ? 'on'
-          : (n > row.segment_from && n < row.segment_to ? 'between' : '');
-      });
-    };
-    for (var i = 1; i <= max; i++) {
-      (function (n) {
-        var b = document.createElement('button');
-        b.textContent = n; b.dataset.n = n;
-        b.onclick = function () {
-          // 한 번 누르면 시작, 두 번째 누르면 끝 — 범위를 두 번 탭으로 정한다
-          if (row.pickEnd) { row.segment_to = Math.max(n, row.segment_from); row.pickEnd = false; }
-          else { row.segment_from = n; row.segment_to = n; row.pickEnd = true; }
-          paint(); updateSummary();
-        };
-        box.appendChild(b);
-      })(i);
-    }
+    box.className = 'asg-voca-list';
+    list.forEach(function (s) {
+      var row = document.createElement('div');
+      row.className = 'asg-voca-row' + (s.voca && s.voca.blocked ? ' blocked' : '');
+      var nm = document.createElement('span');
+      nm.className = 'asg-voca-name';
+      nm.textContent = s.name;
+      var rg = document.createElement('span');
+      if (s.voca && s.voca.blocked) {
+        rg.textContent = s.voca.blocked + ' — 원생 관리에서 지정해주세요';
+      } else if (s.voca) {
+        var cnt = s.voca.to - s.voca.from + 1;
+        rg.textContent = s.voca.label + ' · ' + s.voca.from + '~' + s.voca.to + '번 (' + cnt + '개)';
+      } else {
+        rg.textContent = '-';
+      }
+      row.appendChild(nm); row.appendChild(rg);
+      box.appendChild(row);
+    });
     wrap.appendChild(box);
-    paint();
-    setTimeout(function () {
-      var on = box.querySelector('button.on');
-      if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest', inline: 'center' });
-    }, 30);
 
-    if (plan.voca_progress && plan.voca_progress.content_unit_id === row.content_unit_id
-        && plan.voca_progress.next_seq > 1) {
-      var p = document.createElement('div');
-      p.className = 'asg-auto';
-      p.innerHTML = '지난 진도 <b>' + (plan.voca_progress.next_seq - 1) + '번</b>까지 — 이어서 시작해요.';
-      wrap.appendChild(p);
+    if (blocked.length) {
+      var warn = document.createElement('div');
+      warn.className = 'asg-auto warn';
+      warn.textContent = blocked.length + '명은 Voca가 나가지 않습니다. 다른 숙제는 정상 배부돼요.';
+      wrap.appendChild(warn);
     }
     return wrap;
   }
@@ -3012,8 +3057,6 @@ var Assign = (function () {
       var it = { action: row.action, subject: subject };
       if (row.count_field) it.count_field = row.count_field;
       if (row.content_unit_id) it.content_unit_id = row.content_unit_id;
-      if (row.segment_from) it.segment_from = row.segment_from;
-      if (row.segment_to) it.segment_to = row.segment_to;
       if (row.required_listens) it.required_listens = row.required_listens;
       if (row.custom) it.custom_label = String(row.custom_label).trim();
       items.push(it);
@@ -3031,7 +3074,7 @@ var Assign = (function () {
         var c = it.count_field ? (s[it.count_field] || 0) : 1;
         // Voca는 회수 1당 듣기+녹음 두 줄이 생긴다(Assign.gs의 isVocaPair_와 같은 조건).
         // 여기서 안 맞추면 확인 문구의 건수가 실제 생성 수와 달라진다.
-        if (it.action === 'voca_record' && it.content_unit_id) c *= 2;
+        if (it.action === 'voca_record') c *= 2;
         n += c;
       });
       if (n > 0) { total += n; per.push(s.name + ' ' + n + '건'); }
@@ -4665,7 +4708,7 @@ App.init();
 // ===== 빌드 표식 =====
 // 폰이 어떤 셸 버전을 쓰는지 로그인 화면에서 눈으로 확인하기 위한 표식.
 // sw.js의 CACHE_VERSION과 함께 올린다. 폰에 이 값이 안 보이면 구버전 캐시를 쓰는 것.
-var BUILD_VERSION = 'shell-v36';
+var BUILD_VERSION = 'shell-v37';
 (function () {
   var el = document.getElementById('build-stamp');
   if (el) el.textContent = BUILD_VERSION;
