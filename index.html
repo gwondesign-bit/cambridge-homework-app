@@ -1916,8 +1916,13 @@ var Manage = (function () {
    * { level, defaults:{}, books:{과목:seq}, students:{학생:{필드:값|null}}, moves:{학생:반} }
    */
   var draft = null;
-  function resetDraft() { draft = { level: null, defaults: {}, books: {}, students: {}, moves: {} }; }
+  function resetDraft() {
+    draft = { level: null, defaults: {}, books: {}, students: {}, moves: {} };
+    openStudentId = null;
+  }
   // voca_blank_mode는 값이 없을 때(=변경 안 함)와 false를 구분해야 해서 초기화하지 않는다
+  var openStudentId = null;   // 지금 펼쳐 놓은 학생 카드(다시 그려도 유지)
+
   function dirtyCount() {
     if (!draft) return 0;
     return (draft.level ? 1 : 0) + Object.keys(draft.defaults).length + Object.keys(draft.books).length +
@@ -2033,6 +2038,15 @@ var Manage = (function () {
     box.appendChild(countSection(g));
     box.appendChild(studentSection(g));
     box.appendChild(saveBar(g));
+    // 스테퍼를 한 번 누를 때마다 화면을 다시 그리는 구조라, 그대로 두면 학생 패널이
+    // 닫혀 값을 연속으로 못 바꾼다("마지막으로 한 문장"을 1→15로 올리려면 열네 번
+    // 다시 열어야 했다). 변경분을 모아 한 번에 저장하는 설계와 어긋나므로 다시 펴준다.
+    if (openStudentId) {
+      var st = (g.students || []).filter(function (s) { return s.student_id === openStudentId; })[0];
+      var row = box.querySelector('.mng-row[data-sid="' + openStudentId + '"]');
+      if (st && row) openStudent(st, g, row);
+      else openStudentId = null;
+    }
   }
 
   /** 변경분이 있을 때만 뜨는 저장 바 — 무엇이 바뀌는지 먼저 보여주고 한 번에 올린다 */
@@ -2335,6 +2349,7 @@ var Manage = (function () {
     g.students.forEach(function (st) {
       var row = document.createElement('div');
       row.className = 'mng-row';
+      row.dataset.sid = st.student_id;
       var main = document.createElement('div');
       main.className = 'mng-row-main';
       var t = document.createElement('div');
@@ -2358,8 +2373,13 @@ var Manage = (function () {
         row.appendChild(tag);
       }
       var btn = document.createElement('button');
-      btn.className = 'mng-btn'; btn.textContent = '수정';
-      btn.onclick = function () { openStudent(st, g, row); };
+      var isOpen = openStudentId === st.student_id;
+      btn.className = 'mng-btn' + (isOpen ? ' on' : '');
+      btn.textContent = isOpen ? '닫기' : '수정';
+      btn.onclick = function () {
+        openStudentId = isOpen ? null : st.student_id;
+        render();
+      };
       row.appendChild(btn);
       sec.appendChild(row);
     });
@@ -2497,6 +2517,7 @@ var Manage = (function () {
 
   /** 학생 개별 예외 조정 — 값이 반 기본값과 같아지면 예외를 지운다 */
   function openStudent(st, g, afterRow) {
+    openStudentId = st.student_id;
     var old = document.getElementById('mng-student');
     if (old) old.remove();
     var box = document.createElement('div');
@@ -4718,7 +4739,7 @@ App.init();
 // ===== 빌드 표식 =====
 // 폰이 어떤 셸 버전을 쓰는지 로그인 화면에서 눈으로 확인하기 위한 표식.
 // sw.js의 CACHE_VERSION과 함께 올린다. 폰에 이 값이 안 보이면 구버전 캐시를 쓰는 것.
-var BUILD_VERSION = 'shell-v38';
+var BUILD_VERSION = 'shell-v39';
 (function () {
   var el = document.getElementById('build-stamp');
   if (el) el.textContent = BUILD_VERSION;
