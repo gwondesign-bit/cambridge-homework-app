@@ -211,6 +211,8 @@
   .rv-btn:disabled { opacity: .5; }
   .rv-panel { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
   .rv-panel audio { width: 100%; margin: 6px 0; }
+  .rv-addset { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--ink); margin: 8px 0 2px; cursor: pointer; }
+  .rv-addset input { width: 16px; height: 16px; }
   .rv-cmt { width: 100%; padding: 9px 10px; border-radius: 10px; border: 1px solid var(--line); font-size: 14px; font-family: inherit; box-sizing: border-box; resize: vertical; min-height: 58px; background: var(--surface); color: var(--ink); }
   .rv-hist { font-size: 12px; color: var(--muted); margin-top: 8px; line-height: 1.7; }
   .rv-empty { text-align: center; color: var(--muted); font-size: 14px; padding: 30px 0; }
@@ -399,6 +401,35 @@
   .ls-msg.good { color: var(--good); }
   .ls-msg.bad { color: var(--danger); }
   .ls-note { text-align: center; font-size: 11px; color: var(--muted); margin-top: 8px; }
+
+  /* ===== Voca 구간 학습 (S-02V) ===== */
+  .hw-card.locked { opacity: .55; }
+  .hw-card.locked:active { transform: none; }
+  .vc-dots { display: flex; gap: 6px; justify-content: center; margin: 10px 0 14px; flex-wrap: wrap; }
+  .vc-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--neutral-bg); flex-shrink: 0; }
+  .vc-dot.done { background: var(--good); }
+  .vc-dot.now { background: var(--ink); transform: scale(1.35); }
+  .vc-card {
+    background: var(--card); border-radius: 16px; padding: 20px 18px; min-height: 190px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06); display: flex; flex-direction: column; gap: 7px;
+  }
+  .vc-no { font-size: 11.5px; color: var(--muted); display: flex; gap: 8px; align-items: baseline; }
+  .vc-pos { font-style: italic; }
+  .vc-word { font-size: 30px; font-weight: 800; color: var(--ink); line-height: 1.2; word-break: break-word; }
+  .vc-sense { font-size: 16px; font-weight: 700; color: var(--ink); }
+  .vc-sent { font-size: 17px; line-height: 1.55; color: var(--ink); margin-top: 6px; word-break: break-word; }
+  .vc-sent-ko { font-size: 14px; line-height: 1.5; color: var(--muted); }
+  /* 빈칸 — 목표 단어만 가린다(랜덤 금지, 설계 5절) */
+  .vc-blank {
+    display: inline-block; min-width: 68px; border-bottom: 2.5px solid var(--ink);
+    vertical-align: baseline;
+  }
+  .vc-reveal {
+    margin-top: 10px; align-self: flex-start; border: 1px solid var(--line);
+    background: var(--neutral-bg); color: var(--ink); font-size: 13px; font-weight: 700;
+    padding: 8px 14px; border-radius: 10px; cursor: pointer;
+  }
+  .vc-hidden-text { visibility: hidden; }
 
   /* ===== S-03 녹음·제출 ===== */
   .rc-stage { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 28px 16px; margin: 14px 0; text-align: center; }
@@ -694,6 +725,31 @@
     <div class="ls-note">끝까지 들으면 자동으로 기록돼요. 앞으로 넘기기는 없어요!</div>
   </div>
 
+  <!-- S-02V Voca 구간 학습 (문장 단위 재생) -->
+  <div id="screen-voca" class="hidden">
+    <button class="back-btn" onclick="App.closeListen()">&larr; 오늘의 숙제로</button>
+    <div class="ls-head">
+      <div class="ls-subject" id="vc-subject"></div>
+      <div class="ls-title" id="vc-title"></div>
+      <div class="ls-count">유효 듣기 <b id="vc-count">0</b>/<span id="vc-required">1</span>회</div>
+    </div>
+    <div class="vc-dots" id="vc-dots"></div>
+    <div class="vc-card" id="vc-card">
+      <div class="vc-no"><span id="vc-seq"></span><span class="vc-pos" id="vc-pos"></span></div>
+      <div class="vc-word" id="vc-word"></div>
+      <div class="vc-sense" id="vc-sense"></div>
+      <div class="vc-sent" id="vc-sent"></div>
+      <div class="vc-sent-ko" id="vc-sent-ko"></div>
+      <button class="vc-reveal hidden" id="vc-reveal">눌러서 답 보기</button>
+    </div>
+    <div class="ls-controls">
+      <button class="ls-btn" id="vc-again" title="이 문장 다시">&#8635;&#xFE0E;</button>
+      <button class="ls-btn main" id="vc-play" title="재생">&#9654;&#xFE0E;</button>
+    </div>
+    <div class="ls-msg" id="vc-msg"></div>
+    <div class="ls-note" id="vc-note">한 문장씩 나와요. 소리가 멈추면 따라 읽어요!</div>
+  </div>
+
   <!-- S-03 녹음·제출 -->
   <div id="screen-record" class="hidden">
     <button class="back-btn" id="rc-back">&larr; 오늘의 숙제로</button>
@@ -790,7 +846,7 @@ var Server = (function () {
     getReviewBoard: ['token', 'groupId', 'dueDate'],
     getSubmissionAudio: ['token', 'submissionId'],
     getSubmissionHistory: ['token', 'itemId'],
-    reviewSubmission: ['token', 'submissionId', 'reviewAction', 'comment'],
+    reviewSubmission: ['token', 'submissionId', 'reviewAction', 'comment', 'addSet'],
     exemptItem: ['token', 'itemId', 'comment'],
     submitStudyPhoto: ['token', 'itemId', 'base64', 'mimeType'],
     getStudyPhotos: ['token', 'itemId'],
@@ -886,11 +942,13 @@ var Server = (function () {
         cards: [
           { item_id: 'AI-1', subject: '기사', label: 'Article 2 · 본문 녹음', seq: '', action_type: 'record', status: '재제출요청', due_date: '2026-07-17', due_time: '21:00', overdue: true },
           { item_id: 'AI-2', subject: '기사', label: 'Article 3 · 단어 듣기', seq: '', action_type: 'listen', status: '미시작', due_date: '2026-07-18', due_time: '21:00', overdue: false },
+          { item_id: 'AI-V1', subject: 'Voca', label: 'Voca 듣기 1~4번', seq: '1/2', action_type: 'listen', status: '미시작', due_date: '2026-07-18', due_time: '21:00', overdue: false },
+          { item_id: 'AI-V2', subject: 'Voca', label: 'Voca 녹음 1~4번', seq: '1/2', action_type: 'record', status: '미시작', due_date: '2026-07-18', due_time: '21:00', overdue: false, locked: true },
           { item_id: 'AI-3', subject: 'Voca', label: 'Voca 07 암송', seq: '1/3', action_type: 'record', status: '진행중', due_date: '2026-07-18', due_time: '21:00', overdue: false },
           { item_id: 'AI-4', subject: 'QnA', label: 'Q&A 서술형 답안', seq: '', action_type: 'write', status: '미시작', due_date: '2026-07-18', due_time: '21:00', overdue: false },
           { item_id: 'AI-5', subject: '리스닝', label: 'Unit 2 · p.14 듣기', seq: '', action_type: 'listen', status: '제출완료', due_date: '2026-07-18', due_time: '21:00', overdue: false }
         ],
-        progress: { done: 1, total: 5 },
+        progress: { done: 1, total: 7 },
         points: { total: 275, todayAwards: [
           { label: '기본 제출 +10', amount: 10 }, { label: '정시 제출 +5', amount: 5 }, { label: 'A반 2등 제출 +5', amount: 5 }
         ] },
@@ -921,6 +979,29 @@ var Server = (function () {
       return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
     },
     getListenData: function (token, itemId) {
+      // Voca 구간 학습 mock — Bricks 900 Unit 1의 앞 4문장. 타임스탬프는 20초 무음에 맞춰 축소했다.
+      // 빈칸 모드는 ?mock=1&round=2 (목표 단어 빈칸), &round=3 (한글 뜻만)으로 확인한다.
+      if (String(itemId).indexOf('AI-V') === 0) {
+        var rd = parseInt((location.search.match(/[?&]round=(\d+)/) || [])[1], 10) || 1;
+        return { ok: true, item_id: itemId, subject: 'Voca', label: 'Voca 듣기 1~4번',
+          content_unit_id: 'CU-VOCA-BRICKS900-U01', audio_url: this._silentWav(20),
+          required: 2, valid_count: this._mockValid, status: '미시작',
+          round: rd, blank_mode: true, segment_from: 1, segment_to: 4,
+          segments: [
+            { seq_no: 1, word: 'child', pos: 'n.', sense: '아이, 어린이',
+              sentence: 'The child is playing with blocks.', sentence_ko: '그 아이는 블록을 가지고 놀고 있다.', blank_word: 'child',
+              word_start: 0.5, word_end: 1.2, ex_start: 1.2, ex_end: 4.0 },
+            { seq_no: 2, word: 'day', pos: 'n.', sense: '날, 하루',
+              sentence: 'A: What day is it today? B: It is Wednesday.', sentence_ko: 'A: 오늘 며칠이니? B: 수요일이야.', blank_word: 'day',
+              word_start: 4.5, word_end: 5.2, ex_start: 5.2, ex_end: 8.5 },
+            { seq_no: 3, word: 'wear', pos: 'v.', sense: '입다, 신다, 쓰다',
+              sentence: 'He wore a hat on the beach.', sentence_ko: '그는 해변에서 모자를 썼다.', blank_word: 'wore',
+              word_start: 9.0, word_end: 9.7, ex_start: 9.7, ex_end: 12.5 },
+            { seq_no: 4, word: 'dream', pos: 'v.', sense: '(장래의) 꿈, 이상',
+              sentence: 'Her dream is to be a doctor.', sentence_ko: '그녀의 꿈은 의사가 되는 것이다.', blank_word: 'dream',
+              word_start: 13.0, word_end: 13.7, ex_start: 16.0, ex_end: 19.0 }
+          ] };
+      }
       return { ok: true, item_id: itemId, subject: '기사', label: 'Article 3 · 단어 듣기',
         transcript: 'apple 사과\nbanana 바나나\ncherry 체리\n(mock 음원은 2초 무음입니다)',
         audio_url: this._silentWav(2), required: 2, valid_count: this._mockValid, status: '미시작' };
@@ -984,6 +1065,14 @@ var Server = (function () {
           { content_unit_id: 'CU-ART-002-BODY', unit_type: 'body_listen', unit_label: '본문', subject: '기사' }
         ] }];
       base.contents_level_filtered = true;
+      // Voca 구간 배부 — 유닛 목록 + 반 진도(이어받기)
+      base.voca_units = [
+        { content_unit_id: 'CU-VOCA-BRICKS900-U01', label: 'Bricks 900 Unit 01', max_seq: 24 },
+        { content_unit_id: 'CU-VOCA-BRICKS900-U02', label: 'Bricks 900 Unit 02', max_seq: 23 },
+        { content_unit_id: 'CU-VOCA-BRICKS900-U03', label: 'Bricks 900 Unit 03', max_seq: 23 }
+      ];
+      base.voca_progress = { content_unit_id: 'CU-VOCA-BRICKS900-U01', next_seq: 5 };
+      base.voca_blank_mode = false;
       return base;
     },
     // ---- 원생 관리(T-04) mock. 저장은 메모리에만 반영해 화면 흐름을 확인한다 ----
@@ -1020,6 +1109,7 @@ var Server = (function () {
       return { ok: true, levels: m.levels, groups: m.groups, books: m.books, unassigned: m.unassigned };
     },
     saveGroupSettings: function (token, groupId, patch) {
+      // 빈칸 모드는 mock 메모리에도 반영해 화면 흐름을 확인할 수 있게 한다
       var g = this._mng.groups.filter(function (x) { return x.group_id === groupId; })[0];
       if (!g) return { ok: false, message: '반을 찾을 수 없어요.' };
       if (patch.level) { g.level = patch.level; g.students.forEach(function (s) { s.level = patch.level; }); }
@@ -1028,6 +1118,7 @@ var Server = (function () {
         // 예외가 없는 학생은 기본값을 따라간다
         g.students.forEach(function (s) { if (s.overrides[f] === undefined) s[f] = patch.defaults[f]; });
       });
+      if (patch.voca_blank_mode !== undefined) g.voca_blank_mode = !!patch.voca_blank_mode;
       return { ok: true, updated: patch };
     },
     saveGroupBook: function (token, groupId, subject, seq) {
@@ -1232,9 +1323,10 @@ var Server = (function () {
     saveManageBatch: function (token, changes) {
       var self = this;
       var failed = [];
-      if (changes.level || changes.defaults) {
+      if (changes.level || changes.defaults || changes.voca_blank_mode !== undefined) {
         var r = self.saveGroupSettings(token, changes.groupId, {
-          level: changes.level, defaults: changes.defaults || {}
+          level: changes.level, defaults: changes.defaults || {},
+          voca_blank_mode: changes.voca_blank_mode
         });
         if (!r.ok) failed.push('반 설정');
       }
@@ -1725,21 +1817,39 @@ var Review = (function () {
     cmt.value = r.comment || '';
     p.appendChild(cmt);
 
+    // Voca 항목이면 "세트 +1" 선택지를 준다. 성실도 대응은 다음 주 회수 조정이 아니라
+    // 그날 바로 나가야 효과가 있다(설계 4절) — 반려하면서 듣기+녹음 한 쌍을 더 붙인다.
+    var isVoca = String(r.action_code || '').indexOf('voca') === 0;
+    var addSet = false;
+    if (isVoca) {
+      var lab = document.createElement('label');
+      lab.className = 'rv-addset';
+      var cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.onchange = function () { addSet = cb.checked; };
+      lab.appendChild(cb);
+      lab.appendChild(document.createTextNode(' 반려하면서 Voca 듣기+녹음 한 세트 더 내주기'));
+      p.appendChild(lab);
+    }
+
     var row = document.createElement('div');
     row.className = 'rv-actions';
     var ok = document.createElement('button');
     ok.className = 'rv-btn primary';
     ok.textContent = '✓ 확인 완료';
     ok.onclick = function () {
-      act('reviewSubmission', [token, r.submission_id, 'approve', cmt.value], r.student_name + ' 확인 완료.');
+      act('reviewSubmission', [token, r.submission_id, 'approve', cmt.value, false], r.student_name + ' 확인 완료.');
     };
     var no = document.createElement('button');
     no.className = 'rv-btn danger';
     no.textContent = '↩ 반려(재제출 요청)';
     no.onclick = function () {
       if (!String(cmt.value).trim()) { msg('반려 사유를 적어주세요. 학생에게 그대로 전달됩니다.', true); return; }
-      if (!confirm(r.student_name + '에게 재제출을 요청할까요?\n제출한 녹음은 지워지지 않고 이력으로 남습니다.')) return;
-      act('reviewSubmission', [token, r.submission_id, 'reject', cmt.value], r.student_name + '에게 재제출 요청했어요.');
+      if (!confirm(r.student_name + '에게 재제출을 요청할까요?' +
+        (addSet ? '\nVoca 듣기+녹음 한 세트가 추가로 나갑니다.' : '') +
+        '\n제출한 녹음은 지워지지 않고 이력으로 남습니다.')) return;
+      act('reviewSubmission', [token, r.submission_id, 'reject', cmt.value, addSet],
+        r.student_name + '에게 재제출 요청했어요.' + (addSet ? ' (세트 +1)' : ''));
     };
     row.appendChild(ok); row.appendChild(no);
     p.appendChild(row);
@@ -1788,10 +1898,12 @@ var Manage = (function () {
    */
   var draft = null;
   function resetDraft() { draft = { level: null, defaults: {}, books: {}, students: {}, moves: {} }; }
+  // voca_blank_mode는 값이 없을 때(=변경 안 함)와 false를 구분해야 해서 초기화하지 않는다
   function dirtyCount() {
     if (!draft) return 0;
     return (draft.level ? 1 : 0) + Object.keys(draft.defaults).length + Object.keys(draft.books).length +
-      Object.keys(draft.students).length + Object.keys(draft.moves).length;
+      Object.keys(draft.students).length + Object.keys(draft.moves).length +
+      (draft.voca_blank_mode !== undefined ? 1 : 0);
   }
 
   // ---- 화면에 보여줄 "지금 값" = 원본에 draft를 얹은 것 ----
@@ -1948,6 +2060,9 @@ var Manage = (function () {
     Object.keys(draft.defaults).forEach(function (f) {
       out.push('기본 ' + labelOf(f) + ' → ' + draft.defaults[f] + '회');
     });
+    if (draft.voca_blank_mode !== undefined) {
+      out.push('Voca 빈칸 모드 → ' + (draft.voca_blank_mode ? '켬' : '끔'));
+    }
     Object.keys(draft.books).forEach(function (subj) {
       var b = (data.books[subj] || []).filter(function (x) { return x.seq === draft.books[subj]; })[0];
       out.push(subj + ' 교재 → ' + (b ? bookName(b.series, b.label) : '?') + ' (진도 1쪽부터 다시)');
@@ -1990,6 +2105,7 @@ var Manage = (function () {
     if (Object.keys(draft.books).length) changes.books = draft.books;
     if (Object.keys(draft.students).length) changes.students = draft.students;
     if (Object.keys(draft.moves).length) changes.moves = draft.moves;
+    if (draft.voca_blank_mode !== undefined) changes.voca_blank_mode = draft.voca_blank_mode;
 
     msg('저장 중...');
     Server.call('saveManageBatch', [token, changes], function (res) {
@@ -2134,6 +2250,35 @@ var Manage = (function () {
     n.className = 'mng-note';
     n.textContent = '0으로 두면 그 항목은 아예 배부되지 않습니다.';
     sec.appendChild(n);
+
+    // ---- Voca 빈칸 모드: 회차가 올라갈수록 가린다(1회 전부 → 2회 목표 단어 → 3회 뜻만) ----
+    // Phonics·Lv0은 문장을 읽는 것 자체가 과제라 끈 채로 시작한다(설계 5절).
+    var cur = draft.voca_blank_mode !== undefined ? draft.voca_blank_mode : !!g.voca_blank_mode;
+    var row = document.createElement('div');
+    row.className = 'mng-cnt';
+    var l = document.createElement('div');
+    l.className = 'mng-cnt-l';
+    l.textContent = 'Voca 빈칸 모드';
+    if (draft.voca_blank_mode !== undefined) {
+      var tg = document.createElement('span');
+      tg.className = 'mng-tag warn'; tg.textContent = '변경';
+      l.appendChild(tg);
+    }
+    var btn = document.createElement('button');
+    btn.className = 'mng-tag ' + (cur ? 'on' : '');
+    btn.textContent = cur ? '켬' : '끔';
+    btn.onclick = function () {
+      var next = !cur;
+      if (next === !!g.voca_blank_mode) delete draft.voca_blank_mode;
+      else draft.voca_blank_mode = next;
+      render();
+    };
+    row.appendChild(l); row.appendChild(btn);
+    sec.appendChild(row);
+    var n2 = document.createElement('div');
+    n2.className = 'mng-note';
+    n2.textContent = '켜면 2회차부터 예문의 목표 단어를 가려요. 낮은 레벨은 꺼두세요.';
+    sec.appendChild(n2);
     return sec;
   }
 
@@ -2498,11 +2643,32 @@ var Assign = (function () {
           });
           rows.push({ on: true, action: action, subject: c.subject, vols: vols, types: types });
         } else {
-          rows.push({
+          var r = {
             on: true, action: action, subject: c.subject,
             count_field: COUNT_FIELD[action] || '',
             content_unit_id: '', required_listens: action === 'article_word' ? 1 : 0
-          });
+          };
+          // Voca는 유닛·문장 범위를 진도에서 이어받는다(교재 페이지와 같은 방식)
+          if (action === 'voca_record') {
+            var vus = plan.voca_units || [];
+            var vp = plan.voca_progress || {};
+            var cur = vus.filter(function (x) { return x.content_unit_id === vp.content_unit_id; })[0];
+            var pick = cur || vus[0];
+            if (pick) {
+              // 지난 유닛을 다 끝냈으면 다음 유닛 1번부터
+              var start = cur ? (vp.next_seq || 1) : 1;
+              if (cur && start > cur.max_seq) {
+                var at = vus.indexOf(cur);
+                pick = vus[at + 1] || cur;
+                start = 1;
+              }
+              r.content_unit_id = pick.content_unit_id;
+              r.voca_max = pick.max_seq;
+              r.segment_from = Math.min(start, pick.max_seq);
+              r.segment_to = Math.min(r.segment_from + 3, pick.max_seq);
+            }
+          }
+          rows.push(r);
         }
       });
     });
@@ -2616,11 +2782,19 @@ var Assign = (function () {
       body.appendChild(contentSelect(row));
     }
 
+    // 2-b) Voca: 유닛 + 문장 범위. 학생이 숙제 개수를 문장으로 세므로 범위가 곧 분량이다.
+    if (row.action === 'voca_record' && !row.custom) {
+      body.appendChild(vocaPicker(row));
+    }
+
     // 3) 학생별 회수로 늘어나는 행: 여기서 묻지 않고 안내만
     if (row.count_field) {
       var a = document.createElement('div');
       a.className = 'asg-auto';
       a.innerHTML = '학생별 회수 자동 — ' + countSummary(row.count_field);
+      if (row.action === 'voca_record' && row.content_unit_id) {
+        a.innerHTML += ' · 회수마다 <b>듣기+녹음 한 쌍</b>이 생겨요';
+      }
       body.appendChild(a);
     }
 
@@ -2635,6 +2809,91 @@ var Assign = (function () {
 
     card.appendChild(body);
     return card;
+  }
+
+  /**
+   * Voca 유닛 + 문장 범위 선택.
+   * 교재 페이지와 같은 "진도 이어받기" 방식 — 지난번 끝난 다음 문장부터 시작값을 잡는다.
+   * 범위가 곧 학생이 세는 숙제 개수라 3~4개가 기본이다.
+   */
+  function vocaPicker(row) {
+    var wrap = document.createElement('div');
+    var units = plan.voca_units || [];
+    if (!units.length) {
+      var none = document.createElement('div');
+      none.className = 'asg-auto';
+      none.textContent = 'Voca 구간표가 아직 없어요 — 구간표를 먼저 넣어주세요(음원 없이는 녹음만 나갑니다).';
+      wrap.appendChild(none);
+      return wrap;
+    }
+
+    var sel = document.createElement('select');
+    sel.className = 'asg-book';
+    units.forEach(function (u) {
+      var o = document.createElement('option');
+      o.value = u.content_unit_id;
+      o.textContent = u.label + ' (' + u.max_seq + '문장)';
+      if (u.content_unit_id === row.content_unit_id) o.selected = true;
+      sel.appendChild(o);
+    });
+    sel.onchange = function () {
+      row.content_unit_id = sel.value;
+      var u = units.filter(function (x) { return x.content_unit_id === sel.value; })[0];
+      row.voca_max = u ? u.max_seq : 0;
+      // 유닛을 바꾸면 1번부터 — 앞 유닛의 번호를 이어받으면 엉뚱한 범위가 나간다
+      row.segment_from = 1;
+      row.segment_to = Math.min(row.voca_max, 4);
+      renderPlan(); updateSummary();
+    };
+    wrap.appendChild(sel);
+
+    var line = document.createElement('div');
+    line.className = 'asg-dial-l';
+    var lbl = document.createElement('span'); lbl.textContent = '문장 범위';
+    var val = document.createElement('b');
+    line.appendChild(lbl); line.appendChild(val);
+    wrap.appendChild(line);
+
+    var box = document.createElement('div');
+    box.className = 'asg-dial';
+    var max = row.voca_max || 0;
+    var paint = function () {
+      val.textContent = row.segment_from + '~' + row.segment_to + '번 (' +
+        Math.max(0, row.segment_to - row.segment_from + 1) + '개)';
+      box.querySelectorAll('button').forEach(function (b) {
+        var n = Number(b.dataset.n);
+        b.className = (n === row.segment_from || n === row.segment_to) ? 'on'
+          : (n > row.segment_from && n < row.segment_to ? 'between' : '');
+      });
+    };
+    for (var i = 1; i <= max; i++) {
+      (function (n) {
+        var b = document.createElement('button');
+        b.textContent = n; b.dataset.n = n;
+        b.onclick = function () {
+          // 한 번 누르면 시작, 두 번째 누르면 끝 — 범위를 두 번 탭으로 정한다
+          if (row.pickEnd) { row.segment_to = Math.max(n, row.segment_from); row.pickEnd = false; }
+          else { row.segment_from = n; row.segment_to = n; row.pickEnd = true; }
+          paint(); updateSummary();
+        };
+        box.appendChild(b);
+      })(i);
+    }
+    wrap.appendChild(box);
+    paint();
+    setTimeout(function () {
+      var on = box.querySelector('button.on');
+      if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest', inline: 'center' });
+    }, 30);
+
+    if (plan.voca_progress && plan.voca_progress.content_unit_id === row.content_unit_id
+        && plan.voca_progress.next_seq > 1) {
+      var p = document.createElement('div');
+      p.className = 'asg-auto';
+      p.innerHTML = '지난 진도 <b>' + (plan.voca_progress.next_seq - 1) + '번</b>까지 — 이어서 시작해요.';
+      wrap.appendChild(p);
+    }
+    return wrap;
   }
 
   function contentSelect(row) {
@@ -2753,6 +3012,8 @@ var Assign = (function () {
       var it = { action: row.action, subject: subject };
       if (row.count_field) it.count_field = row.count_field;
       if (row.content_unit_id) it.content_unit_id = row.content_unit_id;
+      if (row.segment_from) it.segment_from = row.segment_from;
+      if (row.segment_to) it.segment_to = row.segment_to;
       if (row.required_listens) it.required_listens = row.required_listens;
       if (row.custom) it.custom_label = String(row.custom_label).trim();
       items.push(it);
@@ -2767,7 +3028,11 @@ var Assign = (function () {
     students.forEach(function (s) {
       var n = 0;
       items.forEach(function (it) {
-        n += it.count_field ? (s[it.count_field] || 0) : 1;
+        var c = it.count_field ? (s[it.count_field] || 0) : 1;
+        // Voca는 회수 1당 듣기+녹음 두 줄이 생긴다(Assign.gs의 isVocaPair_와 같은 조건).
+        // 여기서 안 맞추면 확인 문구의 건수가 실제 생성 수와 달라진다.
+        if (it.action === 'voca_record' && it.content_unit_id) c *= 2;
+        n += c;
       });
       if (n > 0) { total += n; per.push(s.name + ' ' + n + '건'); }
     });
@@ -3302,7 +3567,7 @@ var App = (function () {
 
   function $(id) { return document.getElementById(id); }
   function show(id) {
-    ['screen-loading','screen-group','screen-name','screen-pin','screen-home','screen-assign','screen-manage','screen-review','screen-dash','screen-mypage','screen-listen','screen-record','screen-kiosk'].forEach(function (s) {
+    ['screen-loading','screen-group','screen-name','screen-pin','screen-home','screen-assign','screen-manage','screen-review','screen-dash','screen-mypage','screen-listen','screen-voca','screen-record','screen-kiosk'].forEach(function (s) {
       $(s).classList.toggle('hidden', s !== id);
     });
     // 화면 전환마다 살짝 떠오르며 나타나는 연출 (매번 새로 재생되도록 클래스를 뗐다 붙인다)
@@ -3317,13 +3582,16 @@ var App = (function () {
     // 거울 모드는 듣기·녹음에서만. 사진 제출은 뒷면 카메라로 공책을 찍는 화면이라
     // 전면 카메라를 잡고 있으면 기기에 따라 촬영이 막힌다.
     var photoMode = (id === 'screen-record' && Rec && Rec.mode === 'photo');
-    if ((id === 'screen-listen' || id === 'screen-record') && !photoMode) {
+    if ((id === 'screen-listen' || id === 'screen-voca' || id === 'screen-record') && !photoMode) {
       // 학습 확인 캡처는 **듣기 화면에서만** 켠다(원장 확정 2026-08-08 — "듣는 와중에").
       // 녹음 화면은 프리뷰만: 소리내어 읽는 중이라 어차피 화면을 보고 있고,
       // 녹음 제출물 자체가 확인 자료가 되므로 사진까지 남길 이유가 없다.
+      // Voca 구간 학습(screen-voca)도 듣기라 같은 규칙을 적용한다.
       var s = loadSession();
-      var canCapture = (id === 'screen-listen') && photoConsent && Listen && Listen.itemId && s && s.token;
-      Mirror.enter(canCapture ? { itemId: Listen.itemId, token: s.token } : null);
+      var listenItem = (id === 'screen-voca') ? (Voca && Voca.itemId) : (Listen && Listen.itemId);
+      var canCapture = (id === 'screen-listen' || id === 'screen-voca') &&
+        photoConsent && listenItem && s && s.token;
+      Mirror.enter(canCapture ? { itemId: listenItem, token: s.token } : null);
     } else Mirror.stop();
   }
   function saveSession(s) { localStorage.setItem(SESSION_KEY, JSON.stringify(s)); }
@@ -3599,8 +3867,18 @@ var App = (function () {
       var st = document.createElement('div');
       st.className = 'hw-status';
       st.textContent = STATUS_LABEL[c.status] || c.status;
+      // Voca 녹음은 짝 듣기가 끝나야 열린다. 카드를 숨기지 않고 잠근 채로 보여줘야
+      // "안 들으면 숙제가 그대로 남아 있다"가 학생 눈에 보인다(설계 4절).
+      if (c.locked) {
+        card.classList.add('locked');
+        st.textContent = '잠김';
+        metaRow.appendChild(document.createTextNode(' · 먼저 듣기를 끝내주세요'));
+      }
       card.appendChild(icon); card.appendChild(main); card.appendChild(st);
-      card.onclick = function () { openItem(c); };
+      card.onclick = function () {
+        if (c.locked) { alert('먼저 짝이 되는 듣기를 끝내주세요!'); return; }
+        openItem(c);
+      };
       wrap.appendChild(card);
     });
     show('screen-dash');
@@ -3615,6 +3893,262 @@ var App = (function () {
     }
     var meta = ACTION_META[c.action_type] || ACTION_META.listen;
     alert(meta.label + ' 화면은 다음 업데이트에서 열려요!\n(' + c.label + ')');
+  }
+
+  // ===== S-02V Voca 구간 학습 =====
+  // 통짜 음원 하나를 받아 ContentSegments의 타임스탬프로 문장 구간만 재생한다.
+  // 다의어 2일차는 단어 구간과 예문 구간이 떨어져 있어(단어는 첫 예문 앞에 한 번만 녹음됨)
+  // "구간 목록"을 순서대로 재생하는 방식으로 통일했다(설계 3절).
+  var Voca = {
+    itemId: null, segs: [], idx: 0, done: {}, audio: null,
+    playing: false, sessionStart: null, revealed: false,
+    round: 1, blankMode: false, required: 1, queue: [], qi: 0, stopAt: 0
+  };
+
+  function vcStage() {
+    // 1회 전부 표시 / 2회 예문의 목표 단어만 빈칸 / 3회 이상 한글 뜻만
+    if (!Voca.blankMode) return 1;
+    return Math.min(3, Math.max(1, Voca.round));
+  }
+
+  /**
+   * 예문에서 목표 단어만 빈칸으로. 랜덤으로 가리면 기능어가 걸려 인출이 엉뚱해진다(설계 5절).
+   * 가릴 토큰은 파이프라인이 blank_word로 지정해준다 — 변화형(stick→stuck, pay→paid)을
+   * 화면이 추측하면 3,152행 중 51행이 안 잡힌다. 없을 때만 여기서 근사 매칭한다.
+   */
+  function fillMaskedSentence(el, sentence, word, blankWord) {
+    el.textContent = '';
+    var w = String(blankWord || word || '').toLowerCase();
+    var parts = String(sentence || '').split(/(\s+)/);
+    var masked = false;
+    parts.forEach(function (p) {
+      if (!p) return;
+      var core = p.replace(/[^A-Za-z'\-]/g, '');
+      var lc = core.toLowerCase();
+      var hit = !masked && core && w &&
+        (lc === w || lc.indexOf(w) === 0 || (w.length >= 4 && lc.indexOf(w.slice(0, w.length - 1)) === 0));
+      if (!hit) { el.appendChild(document.createTextNode(p)); return; }
+      masked = true;
+      var i = p.indexOf(core);
+      if (i > 0) el.appendChild(document.createTextNode(p.slice(0, i)));
+      var b = document.createElement('span');
+      b.className = 'vc-blank';
+      b.innerHTML = '&nbsp;';
+      el.appendChild(b);
+      if (i + core.length < p.length) el.appendChild(document.createTextNode(p.slice(i + core.length)));
+    });
+    return masked;
+  }
+
+  function vcRender() {
+    var s = Voca.segs[Voca.idx];
+    if (!s) return;
+    var stage = vcStage();
+    var reveal = Voca.revealed;
+
+    $('vc-seq').textContent = s.seq_no + '번';
+    $('vc-pos').textContent = s.pos || '';
+    $('vc-sense').textContent = s.sense || '';
+    $('vc-sent-ko').textContent = s.sentence_ko || '';
+
+    var wordEl = $('vc-word'), sentEl = $('vc-sent');
+    wordEl.classList.remove('vc-hidden-text');
+    sentEl.classList.remove('vc-hidden-text');
+
+    if (stage === 1 || reveal) {
+      wordEl.textContent = s.word;
+      sentEl.textContent = s.sentence;
+    } else if (stage === 2) {
+      wordEl.textContent = s.word;
+      if (!fillMaskedSentence(sentEl, s.sentence, s.word, s.blank_word)) sentEl.textContent = s.sentence;
+    } else {
+      // 3회차: 한글 뜻만 보고 영어를 스스로 산출한다
+      wordEl.textContent = '???';
+      sentEl.textContent = '';
+    }
+    var showReveal = stage > 1 && !reveal;
+    $('vc-reveal').classList.toggle('hidden', !showReveal);
+    $('vc-note').textContent = stage === 1
+      ? '한 문장씩 나와요. 소리가 멈추면 따라 읽어요!'
+      : (stage === 2 ? '빈칸에 들어갈 단어를 말한 뒤 눌러서 확인해요' : '한글 뜻만 보고 영어로 말해본 뒤 확인해요');
+
+    var dots = $('vc-dots');
+    dots.textContent = '';
+    Voca.segs.forEach(function (x, i) {
+      var d = document.createElement('div');
+      d.className = 'vc-dot' + (Voca.done[x.seq_no] ? ' done' : '') + (i === Voca.idx ? ' now' : '');
+      dots.appendChild(d);
+    });
+  }
+
+  /** 이 문장에서 재생할 구간 목록. 단어와 예문이 붙어 있으면 한 구간으로 이어 재생 */
+  function vcQueueFor(s) {
+    if (Math.abs(s.ex_start - s.word_end) < 0.08) return [[s.word_start, s.ex_end]];
+    return [[s.word_start, s.word_end], [s.ex_start, s.ex_end]];
+  }
+
+  function vcPlayCurrent() {
+    var s = Voca.segs[Voca.idx];
+    if (!s || !Voca.audio) return;
+    Voca.queue = vcQueueFor(s);
+    Voca.qi = 0;
+    Voca.revealed = (vcStage() === 1);
+    vcRender();
+    vcPlayRange();
+  }
+
+  function vcPlayRange() {
+    var r = Voca.queue[Voca.qi];
+    if (!r) { vcSegmentEnded(); return; }
+    Voca.stopAt = r[1];
+    try { Voca.audio.currentTime = r[0]; } catch (e) {}
+    Voca.audio.play();
+    Voca.playing = true;
+    $('vc-play').innerHTML = '&#9208;&#xFE0E;';
+  }
+
+  function vcSegmentEnded() {
+    Voca.playing = false;
+    $('vc-play').innerHTML = '&#9654;&#xFE0E;';
+    var s = Voca.segs[Voca.idx];
+    if (!s) return;
+    Voca.done[s.seq_no] = true;
+    vcRender();
+    if (Object.keys(Voca.done).length >= Voca.segs.length) { vcAllDone(); return; }
+    if (Voca.idx < Voca.segs.length - 1) {
+      Voca.idx++;
+      setTimeout(function () { if (!Voca.playing) vcPlayCurrent(); }, 400);
+    }
+  }
+
+  function vcAllDone() {
+    $('vc-msg').textContent = '기록 중...';
+    $('vc-msg').className = 'ls-msg';
+    var sess = loadSession();
+    var started = Voca.sessionStart ? tsStr(Voca.sessionStart) : tsStr(new Date());
+    Server.call('recordListenSession', [sess.token, Voca.itemId, started, true, false], function (res) {
+      if (!res.ok) {
+        $('vc-msg').textContent = res.message || '기록에 실패했어요. 한 번 더 들어주세요.';
+        $('vc-msg').className = 'ls-msg bad';
+        return;
+      }
+      $('vc-count').textContent = res.valid_count;
+      $('vc-required').textContent = res.required;
+      if (res.just_completed) {
+        var earned = (res.awards || []).reduce(function (sum, a) { return sum + a.amount; }, 0);
+        $('vc-msg').textContent = '다 들었어요!' + (earned ? ' +' + earned + 'P' : '') + ' 이제 녹음이 열려요';
+        $('vc-msg').className = 'ls-msg good';
+        setTimeout(function () { loadDashboard(sess); }, 1800);
+      } else {
+        $('vc-msg').textContent = '한 번 더 들으면 끝나요!';
+        $('vc-msg').className = 'ls-msg';
+        Voca.done = {};
+        Voca.idx = 0;
+        Voca.sessionStart = null;
+        vcRender();
+      }
+    });
+  }
+
+  function setupVoca(d) {
+    Voca.itemId = d.item_id;
+    Voca.segs = d.segments || [];
+    Voca.idx = 0;
+    Voca.done = {};
+    Voca.playing = false;
+    Voca.sessionStart = null;
+    Voca.round = d.round || 1;
+    Voca.blankMode = !!d.blank_mode;
+    Voca.required = d.required || 1;
+    Voca.revealed = false;
+
+    $('vc-subject').textContent = d.subject || 'Voca';
+    $('vc-title').textContent = d.label || 'Voca 듣기';
+    $('vc-count').textContent = d.valid_count;
+    $('vc-required').textContent = d.required;
+    $('vc-msg').textContent = '';
+    $('vc-msg').className = 'ls-msg';
+    $('vc-play').disabled = true;
+
+    if (Voca.audio) { Voca.audio.pause(); Voca.audio.src = ''; }
+    var audio = new Audio();
+    audio.preload = 'auto';
+    Voca.audio = audio;
+
+    // 구간 끝에서 멈춘다 — 통짜 파일이라 ended 이벤트를 쓸 수 없다
+    audio.addEventListener('timeupdate', function () {
+      if (Voca.playing && Voca.stopAt && audio.currentTime >= Voca.stopAt) {
+        audio.pause();
+        Voca.playing = false;
+        Voca.qi++;
+        if (Voca.qi < Voca.queue.length) vcPlayRange();
+        else vcSegmentEnded();
+      }
+    });
+    audio.addEventListener('error', function () {
+      $('vc-msg').textContent = '음원을 불러올 수 없어요. 선생님께 알려주세요.';
+      $('vc-msg').className = 'ls-msg bad';
+      $('vc-play').disabled = true;
+    });
+
+    if (d.audio_url) {
+      audio.src = d.audio_url;
+      $('vc-play').disabled = false;
+    } else if (d.has_audio) {
+      $('vc-msg').textContent = '음원 불러오는 중...';
+      vocaLoadAudio(d.content_unit_id, audio);
+    } else {
+      $('vc-msg').textContent = '음원이 아직 등록되지 않았어요. 선생님께 알려주세요.';
+      $('vc-msg').className = 'ls-msg bad';
+    }
+
+    $('vc-play').onclick = function () {
+      if (Voca.playing) {
+        audio.pause(); Voca.playing = false;
+        $('vc-play').innerHTML = '&#9654;&#xFE0E;';
+      } else {
+        if (!Voca.sessionStart) Voca.sessionStart = new Date();
+        vcPlayCurrent();
+      }
+    };
+    $('vc-again').onclick = function () { vcPlayCurrent(); };  // 되감기는 허용(설계·CLAUDE.md)
+    $('vc-reveal').onclick = function () { Voca.revealed = true; vcRender(); };
+
+    vcRender();
+    show('screen-voca');
+  }
+
+  /**
+   * 통짜 음원을 받아 blob으로 재생. 유닛 하나를 몇 주에 걸쳐 나눠 쓰므로
+   * content_unit_id 기준으로 캐시해두면 두 번째부터는 네트워크를 안 탄다(WBS 3.9).
+   */
+  var vocaAudioCache = {};
+  function vocaLoadAudio(unitId, audio) {
+    if (vocaAudioCache[unitId]) {
+      audio.src = vocaAudioCache[unitId];
+      $('vc-msg').textContent = '';
+      $('vc-play').disabled = false;
+      return;
+    }
+    var sess = loadSession();
+    Server.call('getAudioForUnit', [sess.token, unitId], function (res) {
+      if (!res.ok) {
+        $('vc-msg').textContent = res.message || '음원을 불러올 수 없어요. 선생님께 알려주세요.';
+        $('vc-msg').className = 'ls-msg bad';
+        return;
+      }
+      var bin = atob(res.base64);
+      var u8 = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      var url = URL.createObjectURL(new Blob([u8], { type: res.mimeType || 'audio/mpeg' }));
+      vocaAudioCache[unitId] = url;
+      audio.src = url;
+      $('vc-msg').textContent = '';
+      $('vc-play').disabled = false;
+    }, function () {
+      $('vc-msg').textContent = '연결이 불안정해요. 뒤로 갔다가 다시 들어와주세요.';
+      $('vc-msg').className = 'ls-msg bad';
+    });
   }
 
   // ===== S-03 녹음·제출 =====
@@ -3939,7 +4473,9 @@ var App = (function () {
         loadDashboard(sess);
         return;
       }
-      setupListen(res);
+      // 구간표가 있는 유닛이면 문장 카드 모드(Voca), 없으면 기존 통짜 재생
+      if (res.segments && res.segments.length) setupVoca(res);
+      else setupListen(res);
     });
   }
 
@@ -4093,10 +4629,16 @@ var App = (function () {
   }
 
   function closeListen() {
-    if (Listen.playing && !Listen.finished) {
+    // Voca 화면은 문장별로 진행되므로 "몇 개 남았는지"로 안내한다
+    var vcLeft = Voca.segs.length ? (Voca.segs.length - Object.keys(Voca.done).length) : 0;
+    if (vcLeft > 0 && Voca.sessionStart) {
+      if (!confirm(vcLeft + '문장이 남았어요. 지금 나가면 이번 듣기는 인정되지 않아요. 나갈까요?')) return;
+    } else if (Listen.playing && !Listen.finished) {
       if (!confirm('아직 다 듣지 않았어요. 지금 나가면 이번 듣기는 인정되지 않아요. 나갈까요?')) return;
     }
     if (Listen.audio) { Listen.audio.pause(); }
+    if (Voca.audio) { Voca.audio.pause(); Voca.playing = false; }
+    Voca.segs = [];
     loadDashboard(loadSession());
   }
 
@@ -4123,7 +4665,7 @@ App.init();
 // ===== 빌드 표식 =====
 // 폰이 어떤 셸 버전을 쓰는지 로그인 화면에서 눈으로 확인하기 위한 표식.
 // sw.js의 CACHE_VERSION과 함께 올린다. 폰에 이 값이 안 보이면 구버전 캐시를 쓰는 것.
-var BUILD_VERSION = 'shell-v35';
+var BUILD_VERSION = 'shell-v36';
 (function () {
   var el = document.getElementById('build-stamp');
   if (el) el.textContent = BUILD_VERSION;
