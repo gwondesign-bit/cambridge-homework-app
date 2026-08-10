@@ -3150,7 +3150,17 @@ var Assign = (function () {
         msg(res.message || '배부하지 못했어요. 다시 해보세요.', true);
         return;
       }
-      msg(res.students + '명에게 ' + res.items + '건 배부 완료! 진도도 갱신됐어요.', false);
+      // Voca가 안 나간 학생은 반드시 알린다 — 전원이 건너뛰어져도 "배부 완료"만 뜨면
+      // 선생님은 나갔다고 믿고, 학생 화면에 Voca가 없는 이유를 알 길이 없다.
+      var skipped = res.voca_skipped || [];
+      var base = res.students + '명에게 ' + res.items + '건 배부 완료! 진도도 갱신됐어요.';
+      if (skipped.length) {
+        msg(base + ' ⚠ Voca 미배부 ' + skipped.length + '명: ' +
+          skipped.map(function (x) { return x.name + '(' + x.reason + ')'; }).join(', ') +
+          ' — 원생 관리에서 교재를 지정해주세요.', true);
+      } else {
+        msg(base, false);
+      }
       loadPlan(true); // 갱신된 진도로 다시 그린다(다음 배부는 이어받은 페이지부터). 안내 문구는 유지
     });
   }
@@ -4708,7 +4718,7 @@ App.init();
 // ===== 빌드 표식 =====
 // 폰이 어떤 셸 버전을 쓰는지 로그인 화면에서 눈으로 확인하기 위한 표식.
 // sw.js의 CACHE_VERSION과 함께 올린다. 폰에 이 값이 안 보이면 구버전 캐시를 쓰는 것.
-var BUILD_VERSION = 'shell-v37';
+var BUILD_VERSION = 'shell-v38';
 (function () {
   var el = document.getElementById('build-stamp');
   if (el) el.textContent = BUILD_VERSION;
